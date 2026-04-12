@@ -1,0 +1,8 @@
+{
+  "devDependencies": {
+    "sass": "^1.99.0"
+  },
+  "dependencies": {
+    "lucide-react": "^1.8.0"
+  }
+}

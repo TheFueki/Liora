@@ -1,0 +1,163 @@
+.auth-page {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #050505;
+  overflow: hidden;
+  position: relative;
+
+  .noise {
+    position: absolute;
+    inset: 0;
+    background: url('https://grainy-gradients.vercel.app/noise.svg');
+    opacity: 0.05;
+    pointer-events: none;
+  }
+}
+
+.glass {
+  background: rgba(15, 15, 15, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 3rem;
+  border-radius: 2px;
+  text-align: center;
+  z-index: 10;
+
+  .brand {
+    margin-bottom: 2.5rem;
+    h1 {
+      font-size: 3rem;
+      letter-spacing: 8px;
+      margin: 0;
+      color: #fff;
+    }
+    p {
+      color: #555;
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      margin-top: 0.5rem;
+    }
+  }
+}
+
+.manifesto {
+  text-align: left;
+  margin-bottom: 2.5rem;
+  .m-item {
+    color: #888;
+    font-size: 0.9rem;
+    margin: 1rem 0;
+    span { color: #fff; margin-right: 10px; font-family: monospace; }
+  }
+}
+
+.auth-btn {
+  width: 100%;
+  padding: 1rem;
+  background: transparent;
+  border: 1px solid #fff;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: #fff;
+    color: #000;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+  }
+}
+
+.input-group {
+  text-align: left;
+  margin-bottom: 1.5rem;
+  label { color: #555; display: block; margin-bottom: 0.5rem; font-size: 0.8rem; }
+  input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.8rem;
+    color: #fff;
+    outline: none;
+    &:focus { border-color: #888; }
+  }
+}
+
+.orbit-spinner {
+  width: 50px;
+  height: 50px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #fff;
+  border-radius: 50%;
+  margin: 0 auto 1.5rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.choice-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.divider {
+  font-size: 0.7rem;
+  color: #444;
+  margin: 10px 0;
+  letter-spacing: 4px;
+}
+
+.secondary {
+  border-color: #333 !important;
+  color: #888 !important;
+  &:hover {
+    border-color: #fff !important;
+    color: #fff !important;
+  }
+}
+
+.key-input {
+  width: 100%;
+  height: 80px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #222;
+  border-radius: 4px;
+  color: #fff;
+  padding: 10px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  resize: none;
+  margin-bottom: 20px;
+  outline: none;
+  &:focus { border-color: #555; }
+}
+
+.back-link {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 0.7rem;
+  margin-top: 20px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  &:hover { color: #fff; }
+}
+
+.input-label {
+  font-size: 0.7rem;
+  color: #666;
+  text-align: left;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}

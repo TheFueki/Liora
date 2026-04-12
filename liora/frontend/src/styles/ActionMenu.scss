@@ -1,0 +1,91 @@
+.action-menu-wrapper {
+  position: relative;
+
+  .main-plus-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #888;
+    padding: 10px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover, &.active {
+      background: rgba(0, 255, 136, 0.1);
+      border-color: rgba(0, 255, 136, 0.4);
+      color: #00ff88;
+      box-shadow: 0 0 20px rgba(0, 255, 136, 0.15);
+    }
+
+    &.active svg {
+      transform: rotate(45deg);
+    }
+
+    svg {
+      transition: transform 0.3s ease;
+    }
+  }
+
+  .actions-dropdown {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 0;
+    width: 200px;
+    background: rgba(10, 10, 10, 0.9);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+
+    .action-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: transparent;
+      border: none;
+      border-radius: 14px;
+      color: #aaa;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      .icon-box {
+        color: #555;
+        display: flex;
+        align-items: center;
+        transition: color 0.2s;
+      }
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.04);
+        color: #fff;
+        
+        .icon-box {
+          color: #00ff88;
+        }
+      }
+    }
+  }
+}
+
+.animate-pop {
+  animation: actionPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes actionPop {
+  from {
+    opacity: 0;
+    transform: translateY(15px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

@@ -1,0 +1,125 @@
+.settings-page {
+  height: 100vh;
+  background: #050505;
+  color: #fff;
+  padding: 40px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.settings-header {
+  max-width: 800px;
+  margin: 0 auto 40px;
+  
+  .back-btn {
+    background: none;
+    border: none;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: 0.2s;
+    &:hover { color: #fff; }
+  }
+  
+  h1 { font-size: 2rem; font-weight: 800; letter-spacing: -1px; }
+}
+
+.settings-grid {
+  max-width: 800px;
+  margin: 0 auto;
+  display: grid;
+  gap: 20px;
+}
+
+.settings-section {
+  padding: 24px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    color: #888;
+    h2 { font-size: 1rem; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+  }
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  
+  &:last-child { border: none; }
+
+  .info {
+    .label { display: block; font-weight: 600; margin-bottom: 4px; }
+    p { margin: 0; font-size: 0.8rem; color: #555; }
+  }
+}
+
+.status-locked {
+  font-size: 0.7rem;
+  background: rgba(0, 255, 136, 0.1);
+  color: #00ff88;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.dark-select {
+  background: #111;
+  border: 1px solid #222;
+  color: #fff;
+  padding: 8px;
+  border-radius: 6px;
+  outline: none;
+}
+
+.danger-btn {
+  margin-top: 20px;
+  width: 100%;
+  padding: 12px;
+  background: rgba(255, 50, 50, 0.1);
+  color: #ff3232;
+  border: 1px solid rgba(255, 50, 50, 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+  &:hover { background: #ff3232; color: #fff; }
+}
+
+input[type="checkbox"] {
+  appearance: none;
+  width: 40px;
+  height: 20px;
+  background: #222;
+  border-radius: 20px;
+  position: relative;
+  cursor: pointer;
+  transition: 0.3s;
+
+  &::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: #555;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: 0.3s;
+  }
+
+  &:checked {
+    background: #fff;
+    &::before { left: 22px; background: #000; }
+  }
+}

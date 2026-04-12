@@ -1,0 +1,127 @@
+:root {
+  --bg-dark: rgba(10, 10, 10, 0.85);
+  --glass-bg: rgba(20, 20, 20, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.05);
+  --accent: #00e5ff;
+  --text-main: #e0e0e0;
+  --text-dim: #666;
+}
+
+body {
+  margin: 0;
+  background-color: transparent;
+  color: var(--text-main);
+  font-family: 'Inter', -apple-system, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+  background: var(--bg-dark);
+  backdrop-filter: blur(20px);
+}
+
+.sidebar {
+  width: 280px;
+  background: var(--glass-bg);
+  border-right: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.logo {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 30px;
+  letter-spacing: 2px;
+}
+
+.identity-box {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+}
+
+.identity-box span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+}
+
+.identity-box code {
+  font-size: 0.7rem;
+  color: #fff;
+  word-break: break-all;
+}
+
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg {
+  max-width: 60%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+}
+
+.msg.mine {
+  align-self: flex-end;
+  background: rgba(0, 229, 255, 0.1);
+  border-color: rgba(0, 229, 255, 0.2);
+}
+
+.input-area {
+  padding: 20px;
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  gap: 10px;
+}
+
+.input-area input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  color: white;
+  padding: 12px 15px;
+  border-radius: 8px;
+  outline: none;
+}
+
+.input-area input:focus {
+  border-color: var(--accent);
+}
+
+.input-area button {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  padding: 0 25px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.input-area button:hover {
+  opacity: 0.8;
+}
