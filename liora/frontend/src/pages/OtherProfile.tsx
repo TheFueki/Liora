@@ -5,12 +5,18 @@ interface OtherProfileProps {
   user: any;
   onClose: () => void;
   onAddContact?: (id: string) => void;
+  onStartChat: (user: any) => void; // Добавляем новый пропс
 }
 
-export default function OtherProfile({ user, onClose, onAddContact }: OtherProfileProps) {
+export default function OtherProfile({ user, onClose, onAddContact, onStartChat }: OtherProfileProps) {
   if (!user) return null;
 
   const avatar = user.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.public_id}`;
+
+  const handleMessageClick = () => {
+    onStartChat(user); // Вызываем функцию начала чата
+    onClose();         // Закрываем модалку профиля
+  };
 
   return (
     <div className="modal-overlay animate-fade" onClick={onClose}>
@@ -55,8 +61,9 @@ export default function OtherProfile({ user, onClose, onAddContact }: OtherProfi
           <button className="btn-add" onClick={() => onAddContact?.(user.public_id)}>
             <UserPlus size={18} /> Add to Network
           </button>
-          <button className="btn-msg">
-            <MessageSquare size={18} /> Start Session
+          {/* Кнопка теперь активна */}
+          <button className="btn-msg" onClick={handleMessageClick}>
+            <MessageSquare size={18} /> Message
           </button>
         </div>
       </div>

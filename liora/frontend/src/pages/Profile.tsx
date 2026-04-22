@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Camera, Check, ShieldCheck, ArrowLeft, RotateCcw } from 'lucide-react';
 import '../styles/Profile.scss';
 import { UpdateProfile, GetProfile } from '../../wailsjs/go/main/App';
+import { supabase } from '../lib/supabaseClient'; 
 
 interface ProfileProps {
   myID: string;
@@ -37,10 +38,38 @@ export default function Profile({ myID, onBack }: ProfileProps) {
     loadProfile();
   }, [myID]);
 
+  // ФУНКЦИЯ ЗАГРУЗКИ ФАЙЛА В STORAGE
+  const uploadToSupabase = async (file: File): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${myID}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // Загружаем в бакет 'avatars'
+      const { data, error } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (error) throw error;
+
+      // Получаем публичную ссылку
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to upload image to server');
+      return null;
+    }
+  };
+
   const handleSave = async () => {
     if (!hasChanges) return;
     setIsSaving(true);
     try {
+      // Сохраняем в БД уже готовую ссылку (которая лежит в стейте avatar)
       await UpdateProfile(username, bio, avatar);
       setHasChanges(false);
     } catch (err) {
@@ -50,19 +79,22 @@ export default function Profile({ myID, onBack }: ProfileProps) {
     }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (file.size > 1024 * 3072) {
-        alert("File too large. Avatar size limit is 3MB.");
+      if (file.size > 3 * 1024 * 1024) {
+        alert("File too large. Limit is 3MB.");
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatar(reader.result as string);
+
+      setIsSaving(true); // Показываем загрузку, пока файл летит в облако
+      const publicUrl = await uploadToSupabase(file);
+      
+      if (publicUrl) {
+        setAvatar(publicUrl); // В стейт летит URL, а не Base64
         setHasChanges(true);
-      };
-      reader.readAsDataURL(file);
+      }
+      setIsSaving(false);
     }
   };
 
@@ -90,12 +122,17 @@ export default function Profile({ myID, onBack }: ProfileProps) {
       <div className="profile-container glass-morphism">
         <div className="avatar-master-section">
           <div className={`avatar-frame ${isSaving ? 'syncing' : ''}`}>
-            <img src={avatar} alt="Identity" />
+            {/* Теперь здесь всегда URL, никакой ошибки INVALID_URL */}
+            <img 
+              src={avatar} 
+              alt="Identity" 
+              onError={(e) => (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/bottts/svg?seed=${myID}`}
+            />
             <div className="avatar-overlay">
-              <button onClick={() => fileInputRef.current?.click()} className="action-btn">
+              <button onClick={() => fileInputRef.current?.click()} className="action-btn" disabled={isSaving}>
                 <Camera size={18} />
               </button>
-              <button onClick={resetAvatar} className="action-btn">
+              <button onClick={resetAvatar} className="action-btn" disabled={isSaving}>
                 <RotateCcw size={18} />
               </button>
             </div>
@@ -119,7 +156,7 @@ export default function Profile({ myID, onBack }: ProfileProps) {
             <textarea 
               value={bio} 
               onChange={(e) => { setBio(e.target.value); setHasChanges(true); }}
-              placeholder="I am a designer from Romania..."
+              placeholder="Tell us about yourself..."
             />
           </div>
 
@@ -138,11 +175,11 @@ export default function Profile({ myID, onBack }: ProfileProps) {
             disabled={!hasChanges || isSaving}
           >
             {isSaving ? (
-              <span className="flex-center"><div className="spinner"></div> Syncing...</span>
+              <span className="flex-center"><div className="spinner"></div> Processing...</span>
             ) : hasChanges ? (
               <span className="flex-center"><Check size={18} /> Commit Changes</span>
             ) : (
-              "Update"
+              "Up to date"
             )}
           </button>
         </footer>

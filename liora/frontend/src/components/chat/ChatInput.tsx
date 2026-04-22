@@ -1,10 +1,7 @@
 import { useState } from 'react';
+import { SendHorizonal, Paperclip } from 'lucide-react';
 
-interface ChatInputProps {
-  onSend: (text: string) => void;
-}
-
-export default function ChatInput({ onSend }: ChatInputProps) {
+export default function ChatInput({ onSend }: { onSend: (text: string) => void }) {
   const [text, setText] = useState('');
 
   const submit = () => {
@@ -14,15 +11,18 @@ export default function ChatInput({ onSend }: ChatInputProps) {
   };
 
   return (
-    <div className="input-area">
+    <div className="chat-input-wrapper glass-morphism">
+      <button className="attach-btn"><Paperclip size={20} /></button>
       <input 
         type="text"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && submit()}
-        placeholder="Type a secure message..." 
+        placeholder="Write an encrypted message..." 
       />
-      <button onClick={submit}>Send</button>
+      <button className={`send-btn ${text ? 'active' : ''}`} onClick={submit}>
+        <SendHorizonal size={20} />
+      </button>
     </div>
   );
 }
