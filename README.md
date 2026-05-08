@@ -21,7 +21,7 @@ Liora is a high-performance desktop communication suite utilizing a Go-based bac
 *   **Local Processing:** All encryption/decryption occurs within the Go-native layer; plaintext never enters the network or the database.
 
 ### 1.3 Data Persistence
-*   **Remote Storage:** Supabase (PostgreSQL) stores only Hex-encoded ciphertexts and public metadata.
+*   **Remote Storage:** Supabase (PostgreSQL) stores only Hex-encoded ciphertexts and public metadata(soon will be changed to the regular postgreSQL).
 *   **Local Storage:** Encrypted SQLite vault for message history and verified contact handshakes.
 
 ---
