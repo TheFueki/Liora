@@ -38,21 +38,18 @@ export default function Profile({ myID, onBack }: ProfileProps) {
     loadProfile();
   }, [myID]);
 
-  // ФУНКЦИЯ ЗАГРУЗКИ ФАЙЛА В STORAGE
   const uploadToSupabase = async (file: File): Promise<string | null> => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${myID}-${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // Загружаем в бакет 'avatars'
       const { data, error } = await supabase.storage
         .from('avatars')
         .upload(filePath, file);
 
       if (error) throw error;
 
-      // Получаем публичную ссылку
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath);
@@ -69,7 +66,6 @@ export default function Profile({ myID, onBack }: ProfileProps) {
     if (!hasChanges) return;
     setIsSaving(true);
     try {
-      // Сохраняем в БД уже готовую ссылку (которая лежит в стейте avatar)
       await UpdateProfile(username, bio, avatar);
       setHasChanges(false);
     } catch (err) {
@@ -87,11 +83,11 @@ export default function Profile({ myID, onBack }: ProfileProps) {
         return;
       }
 
-      setIsSaving(true); // Показываем загрузку, пока файл летит в облако
+      setIsSaving(true);
       const publicUrl = await uploadToSupabase(file);
       
       if (publicUrl) {
-        setAvatar(publicUrl); // В стейт летит URL, а не Base64
+        setAvatar(publicUrl); 
         setHasChanges(true);
       }
       setIsSaving(false);
@@ -122,7 +118,6 @@ export default function Profile({ myID, onBack }: ProfileProps) {
       <div className="profile-container glass-morphism">
         <div className="avatar-master-section">
           <div className={`avatar-frame ${isSaving ? 'syncing' : ''}`}>
-            {/* Теперь здесь всегда URL, никакой ошибки INVALID_URL */}
             <img 
               src={avatar} 
               alt="Identity" 

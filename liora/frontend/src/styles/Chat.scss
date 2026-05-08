@@ -8,51 +8,109 @@
   overflow: hidden;
 
   .chat-header {
-    padding: 15px 25px;
+    padding: 12px 25px; // Немного уменьшил паддинг для компактности
     display: flex;
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(15px);
-    background: rgba(18, 18, 18, 0.4);
+    backdrop-filter: blur(20px);
+    background: rgba(18, 18, 18, 0.6);
     z-index: 10;
 
     .header-info {
       display: flex;
       align-items: center;
       gap: 12px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+
+      &:hover {
+        opacity: 0.8;
+      }
 
       .avatar-mini {
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
-        background: linear-gradient(135deg, #6366f1, #a855f7); // Градиент для аватара
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #6366f1, #a855f7);
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 600;
-        font-size: 0.8rem;
+        font-size: 0.9rem;
         color: white;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+
+        .avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .avatar-initials {
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
       }
 
-      h3 {
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 500;
-        color: #fff;
-      }
+      .user-details {
+        h3 {
+          margin: 0;
+          font-size: 1rem;
+          font-weight: 600;
+          color: #fff;
+          letter-spacing: -0.01em;
+        }
 
-      .status-online {
-        display: block;
-        font-size: 0.75rem;
-        color: #2ecc71;
-        opacity: 0.8;
+        .status-container {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 2px;
+
+          .status-dot {
+            width: 6px;
+            height: 6px;
+            background: #2ecc71;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(46, 204, 113, 0.6);
+          }
+
+          .status-text {
+            font-size: 0.75rem;
+            color: #2ecc71;
+            opacity: 0.9;
+            font-weight: 500;
+          }
+        }
       }
     }
 
     .header-actions {
-      .shield-icon {
-        color: rgba(255, 255, 255, 0.3);
+      .security-badge {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+
+        .shield-icon {
+          color: rgba(255, 255, 255, 0.2);
+          transition: all 0.3s ease;
+          
+          &.active {
+            color: #00ff88;
+            filter: drop-shadow(0 0 5px rgba(0, 255, 136, 0.4));
+          }
+        }
+
+        span {
+          font-size: 9px;
+          color: rgba(255, 255, 255, 0.3);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
       }
     }
   }
@@ -64,7 +122,6 @@
     display: flex;
     flex-direction: column;
     
-    // Стилизация скроллбара под Apple style
     &::-webkit-scrollbar {
       width: 5px;
     }
@@ -88,9 +145,10 @@
     &.mine {
       justify-content: flex-end;
       .message-bubble {
-        background: #007aff; // Синий цвет Apple
+        background: #007aff; 
         color: white;
         border-bottom-right-radius: 4px;
+        box-shadow: 0 4px 15px rgba(0, 122, 255, 0.2);
       }
     }
 
@@ -98,7 +156,7 @@
       justify-content: flex-start;
       .message-bubble {
         background: rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(5px);
+        backdrop-filter: blur(10px);
         color: #efefef;
         border: 1px solid rgba(255, 255, 255, 0.05);
         border-bottom-left-radius: 4px;
@@ -111,7 +169,6 @@
     border-radius: 18px;
     max-width: 70%;
     position: relative;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     
     p {
       margin: 0;
@@ -125,8 +182,8 @@
       justify-content: flex-end;
       align-items: center;
       gap: 4px;
-      font-size: 0.7rem;
-      opacity: 0.6;
+      font-size: 0.65rem;
+      opacity: 0.5;
       margin-top: 4px;
     }
   }
@@ -136,42 +193,82 @@
   margin: 20px;
   padding: 8px 16px;
   background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(25px);
   border-radius: 15px;
   display: flex;
   align-items: center;
   gap: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.key-warning {
+    border-color: rgba(255, 68, 68, 0.3);
+    background: rgba(255, 68, 68, 0.02);
+  }
 
   &:focus-within {
     background: rgba(255, 255, 255, 0.06);
     border-color: rgba(0, 122, 255, 0.4);
+    box-shadow: 0 0 20px rgba(0, 122, 255, 0.1);
   }
 
-  input {
+  .input-container {
     flex: 1;
-    background: transparent;
-    border: none;
-    color: white;
-    outline: none;
-    padding: 10px 0;
-    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 
-    &::placeholder {
-      color: rgba(255, 255, 255, 0.2);
+    input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: white;
+      outline: none;
+      padding: 10px 0;
+      font-size: 0.95rem;
+
+      &::placeholder {
+        color: rgba(255, 255, 255, 0.2);
+      }
+
+      &:disabled {
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  .security-indicator {
+    display: flex;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.2);
+
+    .error-icon {
+      color: #ff4444;
+    }
+
+    .lock-status {
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+  }
+
+  .attach-btn, .send-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: 0.2s;
+    display: flex;
+    align-items: center;
+    padding: 5px;
+
+    &:hover:not(:disabled) {
+      color: #fff;
     }
   }
 
   .send-btn {
-    background: none;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    transition: 0.3s;
-    display: flex;
-    align-items: center;
-
     &.active {
       color: #007aff;
       transform: scale(1.1);
@@ -183,16 +280,48 @@
     }
   }
 }
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 
-// Анимация появления
+  .action-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    padding: 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #007aff; 
+    }
+
+    &:active {
+      transform: scale(0.92);
+    }
+  }
+
+  .divider-v {
+    width: 1px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 4px;
+  }
+}
 .animate-fade {
-  animation: chatFadeIn 0.3s ease-out;
+  animation: chatFadeIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes chatFadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(15px);
   }
   to {
     opacity: 1;
