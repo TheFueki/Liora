@@ -6,16 +6,24 @@ export function CreateNewIdentity() {
   return window['go']['main']['App']['CreateNewIdentity']();
 }
 
+export function DecryptMessage(arg1, arg2) {
+  return window['go']['main']['App']['DecryptMessage'](arg1, arg2);
+}
+
+export function EncryptMessage(arg1, arg2) {
+  return window['go']['main']['App']['EncryptMessage'](arg1, arg2);
+}
+
+export function GetAvailableAccounts() {
+  return window['go']['main']['App']['GetAvailableAccounts']();
+}
+
 export function GetChatHistory(arg1) {
   return window['go']['main']['App']['GetChatHistory'](arg1);
 }
 
 export function GetLocalHistory(arg1) {
   return window['go']['main']['App']['GetLocalHistory'](arg1);
-}
-
-export function GetMessages() {
-  return window['go']['main']['App']['GetMessages']();
 }
 
 export function GetMyID() {
@@ -34,12 +42,20 @@ export function ImportKey(arg1) {
   return window['go']['main']['App']['ImportKey'](arg1);
 }
 
+export function Logout() {
+  return window['go']['main']['App']['Logout']();
+}
+
 export function SearchUsers(arg1) {
   return window['go']['main']['App']['SearchUsers'](arg1);
 }
 
 export function SendMessage(arg1, arg2) {
   return window['go']['main']['App']['SendMessage'](arg1, arg2);
+}
+
+export function SwitchToAccount(arg1) {
+  return window['go']['main']['App']['SwitchToAccount'](arg1);
 }
 
 export function UpdateProfile(arg1, arg2, arg3) {

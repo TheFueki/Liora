@@ -15,7 +15,76 @@
     pointer-events: none;
   }
 }
+.account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 250px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  padding-right: 5px;
 
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+}
+
+.account-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .account-avatar {
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    color: #888;
+  }
+
+  .account-info {
+    flex: 1;
+    .acc-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #eee;
+    }
+    .acc-status {
+      font-size: 10px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+  }
+
+  .enter-icon {
+    color: #444;
+    transition: color 0.2s;
+  }
+
+  &:hover .enter-icon {
+    color: #fff;
+  }
+}
 .glass {
   background: rgba(15, 15, 15, 0.7);
   backdrop-filter: blur(20px);

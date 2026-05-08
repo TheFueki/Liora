@@ -6,13 +6,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
-	"time"
-
 	"liora/backend/crypto"
 	"liora/backend/db"
 	"liora/backend/network"
-	"liora/backend/vault"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/supabase-community/postgrest-go"
 	"github.com/supabase-community/supabase-go"
@@ -24,6 +23,12 @@ type ChatMessage struct {
 	Content   string `json:"content"`
 	IsMine    bool   `json:"is_mine"`
 	Timestamp string `json:"timestamp"`
+}
+
+type Account struct {
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatarUrl"`
 }
 
 type Message struct {
@@ -46,7 +51,6 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-
 	a.client = db.Client
 
 	a.myID = a.initIdentity()
@@ -56,48 +60,224 @@ func (a *App) startup(ctx context.Context) {
 	})
 }
 
+func (a *App) loadMyPrivateKey() ([32]byte, error) {
+	var zero [32]byte
+	data, err := os.ReadFile("liora_identity.key")
+	if err != nil {
+		return zero, err
+	}
+	if len(data) < 32 {
+		return zero, fmt.Errorf("invalid key file size")
+	}
+	return crypto.ToByte32(data[:32])
+}
+
 func (a *App) initIdentity() string {
 	keyFile := "liora_identity.key"
-	var publicKey ed25519.PublicKey
 
 	data, err := os.ReadFile(keyFile)
-	if err != nil {
+	if err != nil || len(data) < 64 {
 		pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-		publicKey = pub
+		id := hex.EncodeToString(pub)
+
 		_ = os.WriteFile(keyFile, priv, 0600)
-	} else {
-		privKey := ed25519.PrivateKey(data)
-		publicKey = privKey.Public().(ed25519.PublicKey)
+		_ = os.WriteFile(id+".key", priv, 0600)
+		return id
 	}
+
+	privKey := ed25519.PrivateKey(data)
+	publicKey := privKey.Public().(ed25519.PublicKey)
 	return hex.EncodeToString(publicKey)
 }
 
 func (a *App) CreateNewIdentity() (string, error) {
-	keyFile := "liora_identity.key"
-
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return "", err
 	}
 
-	err = os.WriteFile(keyFile, priv, 0600)
+	id := hex.EncodeToString(pub)
+
+	err = os.WriteFile("liora_identity.key", priv, 0600)
 	if err != nil {
 		return "", err
 	}
+	_ = os.WriteFile(id+".key", priv, 0600)
 
-	a.myID = hex.EncodeToString(pub)
+	a.myID = id
 	return a.myID, nil
 }
 
 func (a *App) ImportKey(hexKey string) (string, error) {
-	return a.initIdentity(), nil
+	if len(hexKey) != 128 {
+		return "", fmt.Errorf("INVALID_KEY_LENGTH_EXPECTED_128")
+	}
+
+	privKeyBytes, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid hex format")
+	}
+
+	privKey := ed25519.PrivateKey(privKeyBytes)
+	pub := privKey.Public().(ed25519.PublicKey)
+	id := hex.EncodeToString(pub)
+
+	err = os.WriteFile("liora_identity.key", privKeyBytes, 0600)
+	if err != nil {
+		return "", fmt.Errorf("failed to save: %v", err)
+	}
+	_ = os.WriteFile(id+".key", privKeyBytes, 0600)
+
+	a.myID = id
+	return a.myID, nil
 }
 
 func (a *App) GetMyID() string {
-	if a.myID == "" {
+	if a.myID == "" || a.myID == "0000000000000000000000000000000000000000000000000000000000000000" {
 		a.myID = a.initIdentity()
 	}
 	return a.myID
+}
+
+func (a *App) EncryptMessage(theirPubKeyHex string, plaintext string) (string, error) {
+	theirKey, err := crypto.DecodeHexKey(theirPubKeyHex)
+	if err != nil {
+		return "", err
+	}
+
+	myPrivKey, err := a.loadMyPrivateKey()
+	if err != nil {
+		return "", err
+	}
+
+	shared, err := crypto.GenerateSharedSecret(myPrivKey, theirKey)
+	if err != nil {
+		return "", err
+	}
+
+	ciphertext, err := crypto.EncryptWithSharedKey([]byte(plaintext), shared)
+	if err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(ciphertext), nil
+}
+
+func (a *App) DecryptMessage(senderPubKeyHex string, ciphertextHex string) (string, error) {
+	senderKey, err := crypto.DecodeHexKey(senderPubKeyHex)
+	if err != nil {
+		return "[Key Error]", nil
+	}
+
+	myPrivKey, err := a.loadMyPrivateKey()
+	if err != nil {
+		return "[Identity Error]", nil
+	}
+
+	ciphertext, err := hex.DecodeString(ciphertextHex)
+	if err != nil {
+		return "[Format Error]", nil
+	}
+
+	shared, err := crypto.GenerateSharedSecret(myPrivKey, senderKey)
+	if err != nil {
+		return "[Crypto Error]", nil
+	}
+
+	plaintext, err := crypto.DecryptWithSharedKey(ciphertext, shared)
+	if err != nil {
+		return "[Decryption Error]", nil
+	}
+
+	return string(plaintext), nil
+}
+
+// --- АККАУНТЫ И ПРОФИЛИ ---
+
+func (a *App) GetAvailableAccounts() ([]Account, error) {
+	files, err := os.ReadDir(".")
+	if err != nil {
+		return nil, err
+	}
+
+	var accountIDs []string
+	for _, file := range files {
+		if !file.IsDir() && filepath.Ext(file.Name()) == ".key" && file.Name() != "liora_identity.key" {
+			id := file.Name()[:len(file.Name())-len(".key")]
+			accountIDs = append(accountIDs, id)
+		}
+	}
+
+	if len(accountIDs) == 0 {
+		return []Account{}, nil
+	}
+
+	var results []map[string]interface{}
+	_, err = a.client.From("profiles").
+		Select("public_id, username, avatar_url", "exact", false).
+		In("public_id", accountIDs).
+		ExecuteTo(&results)
+
+	profileMap := make(map[string]map[string]interface{})
+	if err == nil {
+		for _, p := range results {
+			if id, ok := p["public_id"].(string); ok {
+				profileMap[id] = p
+			}
+		}
+	}
+
+	var accounts []Account
+	for _, id := range accountIDs {
+		username := id
+		avatar := ""
+
+		if p, ok := profileMap[id]; ok {
+			if u, ok := p["username"].(string); ok && u != "" {
+				username = u
+			}
+			if av, ok := p["avatar_url"].(string); ok {
+				avatar = av
+			}
+		}
+
+		accounts = append(accounts, Account{
+			ID:        id,
+			Username:  username,
+			AvatarURL: avatar,
+		})
+	}
+
+	return accounts, nil
+}
+
+func (a *App) SwitchToAccount(accountID string) (string, error) {
+	sourceFile := accountID + ".key"
+	data, err := os.ReadFile(sourceFile)
+	if err != nil {
+		return "", fmt.Errorf("account file not found: %v", err)
+	}
+
+	err = os.WriteFile("liora_identity.key", data, 0600)
+	if err != nil {
+		return "", err
+	}
+
+	a.myID = hex.EncodeToString(ed25519.PrivateKey(data).Public().(ed25519.PublicKey))
+	return a.myID, nil
+}
+
+func (a *App) Logout() error {
+	keyFile := "liora_identity.key"
+	a.myID = ""
+
+	if _, err := os.Stat(keyFile); err == nil {
+		err := os.Remove(keyFile)
+		if err != nil {
+			return fmt.Errorf("failed to delete identity file: %v", err)
+		}
+	}
+	return nil
 }
 
 func (a *App) GetProfile() (map[string]interface{}, error) {
@@ -108,29 +288,23 @@ func (a *App) GetProfile() (map[string]interface{}, error) {
 	myID := a.GetMyID()
 	var results []map[string]interface{}
 
-	// Добавляем логирование
-	fmt.Printf("Searching for profile with ID: [%s]\n", myID)
-
 	_, err := a.client.From("profiles").
 		Select("*", "exact", false).
 		Eq("public_id", myID).
 		ExecuteTo(&results)
 
 	if err != nil {
-		fmt.Println("SUPABASE ERROR:", err)
 		return nil, err
 	}
 
 	if len(results) > 0 {
-		fmt.Printf("Profile found: %+v\n", results[0])
 		return results[0], nil
 	}
 
-	fmt.Println("Profile not found in DB rows")
 	return nil, fmt.Errorf("profile not found")
 }
+
 func (a *App) GetMyInfo() (map[string]interface{}, error) {
-	fmt.Println("DEBUG: Requesting info for ID:", a.myID)
 	profile, err := a.GetProfile()
 	if err != nil {
 		return map[string]interface{}{
@@ -142,6 +316,7 @@ func (a *App) GetMyInfo() (map[string]interface{}, error) {
 	}
 	return profile, nil
 }
+
 func (a *App) UpdateProfile(username, bio, avatar string) error {
 	if a.client == nil {
 		return fmt.Errorf("database not connected")
@@ -154,13 +329,10 @@ func (a *App) UpdateProfile(username, bio, avatar string) error {
 		"avatar_url": avatar,
 	}
 
-	// Выполняем Upsert
 	_, _, err := a.client.From("profiles").Upsert(row, "public_id", "representation", "exact").Execute()
 
 	if err == nil {
-		// КЛЮЧЕВОЙ МОМЕНТ: Сигнализируем фронтенду, что профиль обновился!
 		runtime.EventsEmit(a.ctx, "profile_updated")
-		fmt.Println("Event emitted: profile_updated")
 	}
 
 	return err
@@ -186,36 +358,27 @@ func (a *App) SearchUsers(query string) ([]map[string]interface{}, error) {
 	return results, err
 }
 
+// --- СООБЩЕНИЯ И ИСТОРИЯ ---
+
 func (a *App) SendMessage(recipientID string, content string) error {
 	if a.client == nil {
 		return fmt.Errorf("database not connected")
 	}
 
-	myPrivBytes, err := vault.LoadPrivateKey()
-	if err != nil {
-		return fmt.Errorf("could not load private key")
-	}
-
-	myPriv, _ := crypto.ToByte32(myPrivBytes)
-	theirPub, err := crypto.DecodeHexKey(recipientID)
-	if err != nil {
-		return fmt.Errorf("invalid recipient public key")
-	}
-
-	sharedKey, _ := crypto.GenerateSharedSecret(myPriv, theirPub)
-	encryptedBytes, err := crypto.EncryptWithSharedKey([]byte(content), sharedKey)
+	// Шифруем перед отправкой
+	encryptedHex, err := a.EncryptMessage(recipientID, content)
 	if err != nil {
 		return fmt.Errorf("encryption failed: %v", err)
 	}
 
-	payloadHex := hex.EncodeToString(encryptedBytes)
-
 	_, _, err = a.client.From("messages").Insert(map[string]interface{}{
 		"sender_id":    a.myID,
 		"recipient_id": recipientID,
-		"content":      payloadHex,
+		"content":      encryptedHex,
+		"is_read":      false,
 	}, false, "", "", "").Execute()
 
+	// Сохраняем локально чистый текст (опционально)
 	localMsg := db.LocalMessage{
 		Sender:    a.myID,
 		Payload:   content,
@@ -232,7 +395,7 @@ func (a *App) GetChatHistory(otherID string) ([]Message, error) {
 	}
 
 	var messages []Message
-	filter := fmt.Sprintf("and(sender_id.eq.\"%s\",recipient_id.eq.\"%s\"),and(sender_id.eq.\"%s\",recipient_id.eq.\"%s\")",
+	filter := fmt.Sprintf("and(sender_id.eq.%s,recipient_id.eq.%s),and(sender_id.eq.%s,recipient_id.eq.%s)",
 		a.myID, otherID, otherID, a.myID)
 
 	_, err := a.client.From("messages").
@@ -242,12 +405,6 @@ func (a *App) GetChatHistory(otherID string) ([]Message, error) {
 		ExecuteTo(&messages)
 
 	return messages, err
-}
-
-func (a *App) GetMessages() []Message {
-	return []Message{
-		{ID: "1", Content: "Liora Active.", SenderID: a.GetMyID(), RecipientID: "system", CreatedAt: time.Now()},
-	}
 }
 
 func (a *App) GetLocalHistory(otherID string) ([]db.LocalMessage, error) {

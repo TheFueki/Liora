@@ -24,7 +24,6 @@ func InitLocalDB() {
 		timestamp INTEGER
 	);`
 
-	// Таблица профилей
 	resTable := `
 	CREATE TABLE IF NOT EXISTS profiles (
 		public_id TEXT PRIMARY KEY,

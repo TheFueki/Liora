@@ -23,6 +23,22 @@ export namespace db {
 
 export namespace main {
 	
+	export class Account {
+	    id: string;
+	    username: string;
+	    avatarUrl: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Account(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.username = source["username"];
+	        this.avatarUrl = source["avatarUrl"];
+	    }
+	}
 	export class Message {
 	    id: string;
 	    sender_id: string;

@@ -7,9 +7,8 @@ import Contacts from './pages/Contacts';
 import SearchUser from './pages/SearchUser';
 import './App.css';
 
-// Импорт функций из Wails
 import { GetMyInfo } from '../wailsjs/go/main/App';
-import { EventsOn } from '../wailsjs/runtime'; // ИМПОРТИРУЙ ЭТО
+import { EventsOn } from '../wailsjs/runtime'; 
 
 type Screen = 'register' | 'dashboard' | 'profile' | 'settings' | 'contacts' | 'search';
 
@@ -19,13 +18,12 @@ function App() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Функция для обновления профиля, которую можно вызвать откуда угодно
   const refreshProfile = () => {
     return GetMyInfo()
       .then((profile) => {
         if (profile && profile.public_id) {
           setMyID(profile.public_id);
-          setUserProfile({...profile}); // Делаем копию объекта для ререндера
+          setUserProfile({...profile}); 
           return profile;
         }
       })
@@ -33,7 +31,6 @@ function App() {
   };
 
   useEffect(() => {
-    // 1. Авто-логин при старте
     refreshProfile().then((profile) => {
       if (profile && profile.username) {
         setScreen('dashboard');
@@ -42,15 +39,18 @@ function App() {
       }
     }).finally(() => setLoading(false));
 
-    // 2. СЛУШАЕМ ОБНОВЛЕНИЯ: Как только в Go сработал EventsEmit, App обновит стейт
     const off = EventsOn("profile_updated", () => {
       console.log("Global signal: profile updated!");
       refreshProfile();
     });
 
-    return () => off(); // Отписка
+    return () => off(); 
   }, []);
-
+  
+  const handleLogout = async () => {
+    setMyID("");
+    setScreen('register');
+  };
   const handleRegistrationComplete = (id: string) => {
     setMyID(id);
     refreshProfile().then(() => setScreen('dashboard'));
@@ -69,6 +69,7 @@ function App() {
           myID={myID} 
           profile={userProfile} 
           setActiveScreen={(s: Screen) => setScreen(s)} 
+          onLogout={handleLogout}
         />
       )}
 

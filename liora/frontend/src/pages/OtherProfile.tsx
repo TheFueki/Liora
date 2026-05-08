@@ -5,7 +5,7 @@ interface OtherProfileProps {
   user: any;
   onClose: () => void;
   onAddContact?: (id: string) => void;
-  onStartChat: (user: any) => void; // Добавляем новый пропс
+  onStartChat: (user: any) => void; 
 }
 
 export default function OtherProfile({ user, onClose, onAddContact, onStartChat }: OtherProfileProps) {
@@ -14,8 +14,8 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
   const avatar = user.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.public_id}`;
 
   const handleMessageClick = () => {
-    onStartChat(user); // Вызываем функцию начала чата
-    onClose();         // Закрываем модалку профиля
+    onStartChat(user); 
+    onClose();        
   };
 
   return (
@@ -52,16 +52,15 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
           </div>
           
           <div className="bio-section">
-            <label>Transmission / Bio</label>
+            <label>Bio</label>
             <p>{user.bio || "No encrypted bio found for this identity node."}</p>
           </div>
         </div>
 
         <div className="profile-actions">
           <button className="btn-add" onClick={() => onAddContact?.(user.public_id)}>
-            <UserPlus size={18} /> Add to Network
+            <UserPlus size={18} /> Add to contacts
           </button>
-          {/* Кнопка теперь активна */}
           <button className="btn-msg" onClick={handleMessageClick}>
             <MessageSquare size={18} /> Message
           </button>

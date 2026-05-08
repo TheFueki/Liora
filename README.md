@@ -1,64 +1,83 @@
-# Liora
+# Liora: Technical Specification
 
 ![Version](https://img.shields.io/badge/version-1.0.0--alpha-00ff88?style=flat-square)
-![Security](https://img.shields.io/badge/security-E2EE_|_Ed25519-00ff88?style=flat-square)
-![Networking](https://img.shields.io/badge/networking-Encrypted_RPC-00ff88?style=flat-square)
+![Security](https://img.shields.io/badge/security-E2EE_|_AES--GCM_|_X25519-00ff88?style=flat-square)
+![Stack](https://img.shields.io/badge/stack-Go_|_Wails_|_React-00ff88?style=flat-square)
 
-**Liora** is a sovereign communication suite designed to eliminate the trade-off between high-end aesthetics and hardcore privacy. Built with **Go** and **Wails**, it provides a hardware-accelerated desktop experience that prioritizes cryptographic integrity and digital autonomy.
-
----
-
-## Tech Architecture
-
-### 1. Cryptographic Identity (Ed25519)
-Unlike legacy messengers that rely on phone numbers or email addresses, Liora uses **Ed25519 (Edwards-curve Digital Signature Algorithm)**. 
-- **Identity = Key:** Your `liora_identity.key` is your only ID. It’s mathematically impossible to forge.
-- **Speed & Security:** Ed25519 provides 128-bit security with significantly smaller keys and faster performance than RSA or traditional ECDSA.
-
-### 2. End-to-End Encryption (E2EE)
-Liora implements a custom encryption layer where every bit of data is encrypted **locally** before it ever touches the network.
-- **No Cleartext on Wire:** Even metadata is minimized to prevent traffic analysis.
-- **Perfect Forward Secrecy (PFS):** (Planned) implementation to ensure that even if a long-term key is compromised, past sessions remain secure.
-
-### 3. Local Vault & Persistence
-The backend uses an encrypted **SQLite**-based vault (`liora_vault.db`) to store:
-- **Encrypted Message History:** Never synced to a cloud.
-- **Contact Handshakes:** Verified through public-key exchange.
-- **Session States:** Managed through a secure Go-based controller.
+Liora is a high-performance desktop communication suite utilizing a Go-based backend and a hardware-accelerated frontend. The system architecture enforces local cryptographic operations to ensure digital autonomy and data sovereignty.
 
 ---
 
-## Technical Stack & Why
+## 1. Security Architecture
 
-### **Backend: Go (Golang)**
-Chosen for its memory safety, high-concurrency capabilities (Goroutines), and ability to compile into a single, static binary. 
-- **Hexagonal Architecture:** The `backend/` folder is divided into independent domains (`crypto`, `db`, `network`), making the security logic easy to audit.
+### 1.1 Identity Management
+*   **Protocol:** Ed25519 (Edwards-curve Digital Signature Algorithm).
+*   **Mechanism:** User identity is bound to a 64-byte private key stored locally (`liora_identity.key`).
+*   **Public ID:** Derived directly from the Ed25519 public key (Hex-encoded). No PII (Personally Identifiable Information) is required for account creation.
 
-### **Frontend: React & TypeScript**
-A strictly typed UI ensures that state management (like handling sensitive keys) is predictable and bug-free.
-- **Glassmorphism Engine:** Custom SCSS architecture using backdrop-filters and alpha-channel transparency for an "Ultra-Dark" high-tech feel.
-- **Wails Bridge:** High-speed IPC (Inter-Process Communication) between the Go backend and JS frontend, avoiding the bloat of an HTTP server.
+### 1.2 Encryption Layer (E2EE)
+*   **Key Exchange:** X25519 (Diffie-Hellman) derived from Ed25519 seeds to establish a 32-byte Shared Secret.
+*   **Symmetric Encryption:** AES-256-GCM (Galois/Counter Mode) for authenticated encryption of all message payloads.
+*   **Local Processing:** All encryption/decryption occurs within the Go-native layer; plaintext never enters the network or the database.
 
----
-
-## The Philosophy: "Digital Sovereignty"
-
-Liora was born from the idea that **privacy is not a feature, it's a right**. 
-
-1. **Zero Telemetry:** The app does not ping any "home" servers. It doesn't track your OS, location, or usage patterns.
-2. **Minimalist Focus:** The interface is stripped of "social" features (likes, stories, ads) to focus entirely on pure, secure communication.
-3. **Native Performance:** By using the OS's native web engine via Wails, Liora consumes ~80% less RAM than Electron-based alternatives like Discord or Signal.
+### 1.3 Data Persistence
+*   **Remote Storage:** Supabase (PostgreSQL) stores only Hex-encoded ciphertexts and public metadata.
+*   **Local Storage:** Encrypted SQLite vault for message history and verified contact handshakes.
 
 ---
 
-## Internal Directory Breakdown
+## 2. Technical Stack
 
-```text
+### 2.1 Backend (Go)
+*   **Wails Framework:** Bridges Go logic to the UI via high-speed IPC, eliminating the overhead of a local HTTP server.
+*   **Concurrency:** Goroutines manage real-time event listening and database operations.
+*   **Cryptographic Primitives:** Native `crypto/ed25519` and `golang.org/x/crypto/curve25519`.
+
+### 2.2 Frontend (React & TypeScript)
+*   **UI Engine:** Strictly typed React components with custom SCSS for "Ultra-Dark Glassmorphism" aesthetics.
+*   **State Management:** Predictable handling of session keys and message buffers.
+*   **Performance:** Utilizes the native OS web engine (WebView2/WebKit), resulting in ~50-80MB RAM idle consumption.
+
+---
+
+## 3. Directory Structure
+
+```
 liora/
 ├── backend/
-│   ├── crypto/   # Implementation of Ed25519 and E2EE primitives
-│   ├── db/       # Interaction with the encrypted liora_vault.db
-│   ├── network/  # Secure socket handling and P2P protocols
-│   └── vault/    # Logic for managing local sensitive credentials
-├── frontend/     # React source with "Ultra-Dark" design system
-└── app.go        # Main Wails entry point for backend-to-frontend bindings
+│   ├── crypto/   # Ed25519/X25519 primitives & AES-GCM logic
+│   ├── db/       # Supabase client & local SQLite persistence
+│   ├── network/  # Real-time message listeners & event routing
+│   └── vault/    # Local filesystem key management
+├── frontend/     # TypeScript source & Dark-mode design system
+├── app.go        # Wails binding definitions and bridge methods
+└── main.go       # Application entry point
+```
+
+## 4. Operational Requirements
+Network: TLS-encrypted tunnel for all remote database interactions.
+
+Identity: Possession of the liora_identity.key file is the sole method of authentication.
+
+Privacy: Zero telemetry. No tracking of OS, usage metrics, or location data.
+
+
+# README
+
+## About
+
+This is the official Wails React-TS template.
+
+You can configure the project by editing `wails.json`. More information about the project settings can be found
+here: https://wails.io/docs/reference/project-config
+
+## Live Development
+
+To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
+server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
+and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
+to this in your browser, and you can call your Go code from devtools.
+
+## Building
+
+To build a redistributable, production mode package, use `wails build`.

@@ -5,11 +5,15 @@ import {db} from '../models';
 
 export function CreateNewIdentity():Promise<string>;
 
+export function DecryptMessage(arg1:string,arg2:string):Promise<string>;
+
+export function EncryptMessage(arg1:string,arg2:string):Promise<string>;
+
+export function GetAvailableAccounts():Promise<Array<main.Account>>;
+
 export function GetChatHistory(arg1:string):Promise<Array<main.Message>>;
 
 export function GetLocalHistory(arg1:string):Promise<Array<db.LocalMessage>>;
-
-export function GetMessages():Promise<Array<main.Message>>;
 
 export function GetMyID():Promise<string>;
 
@@ -19,8 +23,12 @@ export function GetProfile():Promise<Record<string, any>>;
 
 export function ImportKey(arg1:string):Promise<string>;
 
+export function Logout():Promise<void>;
+
 export function SearchUsers(arg1:string):Promise<Array<Record<string, any>>>;
 
 export function SendMessage(arg1:string,arg2:string):Promise<void>;
+
+export function SwitchToAccount(arg1:string):Promise<string>;
 
 export function UpdateProfile(arg1:string,arg2:string,arg3:string):Promise<void>;
