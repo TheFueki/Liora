@@ -69,7 +69,7 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
             return { ...msg, content: clearText };
           } catch (err) {
             console.error("Decryption failed:", err);
-            return { ...msg, content: "[🔒 Зашифровано]" };
+            return { ...msg, content: "[🔒 Encrypted]" };
           }
         }));
         setMessages(decrypted);
@@ -94,7 +94,7 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
               const clearText = await DecryptMessage(partnerKey, newMsg.content);
               setMessages((prev) => [...prev, { ...newMsg, content: clearText }]);
             } catch (e) {
-              setMessages((prev) => [...prev, { ...newMsg, content: "[🔒 Новое сообщение]" }]);
+              setMessages((prev) => [...prev, { ...newMsg, content: "[🔒 New message]" }]);
             }
             setTimeout(scrollToBottom, 50);
           }

@@ -27,6 +27,8 @@ export function Logout():Promise<void>;
 
 export function SearchUsers(arg1:string):Promise<Array<Record<string, any>>>;
 
+export function SelectFile():Promise<string>;
+
 export function SendMessage(arg1:string,arg2:string):Promise<void>;
 
 export function SwitchToAccount(arg1:string):Promise<string>;

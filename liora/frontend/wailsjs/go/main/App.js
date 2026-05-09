@@ -50,6 +50,10 @@ export function SearchUsers(arg1) {
   return window['go']['main']['App']['SearchUsers'](arg1);
 }
 
+export function SelectFile() {
+  return window['go']['main']['App']['SelectFile']();
+}
+
 export function SendMessage(arg1, arg2) {
   return window['go']['main']['App']['SendMessage'](arg1, arg2);
 }
