@@ -76,3 +76,8 @@ temp/
 *.sql.gz
 .sass-cache/
 .eslintcache
+frontend/src/wailsjs/
+frontend/wailsjs/*
+.docker
+docker-compose.override.yml
+bin/

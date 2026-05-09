@@ -11,9 +11,11 @@ import (
 	"liora/backend/network"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/supabase-community/postgrest-go"
+	storage_go "github.com/supabase-community/storage-go"
 	"github.com/supabase-community/supabase-go"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -58,6 +60,17 @@ func (a *App) startup(ctx context.Context) {
 	network.ListenForMessages(a.myID, func(msg network.Message) {
 		network.HandleIncomingMessage(a.ctx, msg)
 	})
+}
+
+func (a *App) SelectFile() (string, error) {
+	selection, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select File",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Images (*.png;*.jpg)", Pattern: "*.png;*.jpg;*.jpeg;*.gif"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	return selection, err
 }
 
 func (a *App) loadMyPrivateKey() ([32]byte, error) {
@@ -191,8 +204,6 @@ func (a *App) DecryptMessage(senderPubKeyHex string, ciphertextHex string) (stri
 
 	return string(plaintext), nil
 }
-
-// --- АККАУНТЫ И ПРОФИЛИ ---
 
 func (a *App) GetAvailableAccounts() ([]Account, error) {
 	files, err := os.ReadDir(".")
@@ -358,19 +369,32 @@ func (a *App) SearchUsers(query string) ([]map[string]interface{}, error) {
 	return results, err
 }
 
-// --- СООБЩЕНИЯ И ИСТОРИЯ ---
-
 func (a *App) SendMessage(recipientID string, content string) error {
 	if a.client == nil {
 		return fmt.Errorf("database not connected")
 	}
 
-	// Шифруем перед отправкой
-	encryptedHex, err := a.EncryptMessage(recipientID, content)
+	finalContent := content
+
+	if strings.HasPrefix(content, "FILE_PATH:") {
+		parts := strings.Split(content, "|CAPTION:")
+		filePath := strings.TrimPrefix(parts[0], "FILE_PATH:")
+		caption := ""
+		if len(parts) > 1 {
+			caption = parts[1]
+		}
+		fileURL, err := a.uploadFileToStorage(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to upload file: %v", err)
+		}
+
+		finalContent = fmt.Sprintf("IMAGE_URL:%s|CAPTION:%s", fileURL, caption)
+	}
+
+	encryptedHex, err := a.EncryptMessage(recipientID, finalContent)
 	if err != nil {
 		return fmt.Errorf("encryption failed: %v", err)
 	}
-
 	_, _, err = a.client.From("messages").Insert(map[string]interface{}{
 		"sender_id":    a.myID,
 		"recipient_id": recipientID,
@@ -378,17 +402,48 @@ func (a *App) SendMessage(recipientID string, content string) error {
 		"is_read":      false,
 	}, false, "", "", "").Execute()
 
-	// Сохраняем локально чистый текст (опционально)
-	localMsg := db.LocalMessage{
-		Sender:    a.myID,
-		Payload:   content,
-		Timestamp: time.Now().Unix(),
+	if err != nil {
+		return err
 	}
-	db.SaveMessageLocal(localMsg)
 
-	return err
+	db.SaveMessageLocal(db.LocalMessage{
+		Sender:    a.myID,
+		Payload:   finalContent,
+		Timestamp: time.Now().Unix(),
+	})
+
+	return nil
 }
 
+func (a *App) uploadFileToStorage(filePath string) (string, error) {
+	fileData, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	fileName := filepath.Base(filePath)
+	uniqueName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), fileName)
+
+	type bucketInterface interface {
+		Upload(string, []byte, storage_go.FileOptions) any
+		GetPublicUrl(string, string) storage_go.SignedUrlResponse
+	}
+
+	rawStorage := any(a.client.Storage).(interface {
+		From(string) *storage_go.Client
+	})
+	bucket := any(rawStorage.From("chat-attachments")).(bucketInterface)
+
+	uploadResult := bucket.Upload(uniqueName, fileData, storage_go.FileOptions{})
+
+	if resp, ok := uploadResult.(struct{ Error string }); ok && resp.Error != "" {
+		return "", fmt.Errorf("storage error: %s", resp.Error)
+	}
+
+	publicUrlObj := bucket.GetPublicUrl(uniqueName, "")
+
+	return publicUrlObj.SignedURL, nil
+}
 func (a *App) GetChatHistory(otherID string) ([]Message, error) {
 	if a.client == nil {
 		return nil, fmt.Errorf("no client")
