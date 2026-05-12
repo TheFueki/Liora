@@ -7,9 +7,7 @@
 Liora is a high-performance desktop communication suite utilizing a Go-based backend and a hardware-accelerated frontend. The system architecture enforces local cryptographic operations to ensure digital autonomy and data sovereignty.
 
 ---
-![Alt-текст](<img width="997" height="757" alt="photo_2026-05-12_20-40-35" src="https://github.com/user-attachments/assets/23a8ad40-c26f-43d0-ba15-7718eb7c4f3a" />
-)
-
+![Liora Architecture](https://github.com/user-attachments/assets/23a8ad40-c26f-43d0-ba15-7718eb7c4f3a)
 
 ## 1. Security Architecture
 
