@@ -1,0 +1,18 @@
+name: TG Notification
+on: [push]
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: send message
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO_LIORA }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🚀 **Push to ${{ github.repository }}**
+            
+            Commit: ${{ github.event.head_commit.message }}
+            Author: ${{ github.actor }}
+            
+            Link: ${{ github.event.head_commit.url }}
