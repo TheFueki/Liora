@@ -1,8 +1,7 @@
 import { useState, KeyboardEvent, useEffect } from 'react';
-import { SendHorizonal, Paperclip, Lock, ShieldAlert, X, FileText, Image as ImageIcon } from 'lucide-react';
-import { EncryptMessage, SelectFile} from '../../../wailsjs/go/main/App'; 
+import { SendHorizonal, Paperclip, Lock, ShieldAlert, X, FileText, Image as ImageIcon, Globe } from 'lucide-react';
+import { EncryptMessage, SelectFile } from '../../../wailsjs/go/main/App'; 
 import * as runtime from '../../../wailsjs/runtime/runtime'; 
-
 
 interface Attachment {
   name: string;
@@ -12,42 +11,42 @@ interface Attachment {
 }
 
 interface ChatInputProps {
-  recipientPubKey: string;
-  onSend: (encryptedData: string, isFile: boolean) => void;
+  recipientPubKey: string; 
+  onSend: (data: string, isFile: boolean) => void;
+  isChannel?: boolean;
 }
 
-export default function ChatInput({ onSend, recipientPubKey }: ChatInputProps) {
+export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatInputProps) {
   const [text, setText] = useState('');
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [hasKeyError, setHasKeyError] = useState(false);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
 
   useEffect(() => {
-    if (!recipientPubKey) {
+    if (!recipientPubKey && !isChannel) {
       setHasKeyError(true);
     } else {
       setHasKeyError(false);
     }
-  }, [recipientPubKey]);
+  }, [recipientPubKey, isChannel]);
 
-const handleAttachClick = async () => {
-  try {
-    const result = await SelectFile(); 
-
-    if (result) {
-      const fileName = result.split(/[\\/]/).pop() || 'file';
-      const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
-      
-      setAttachment({
-        name: fileName,
-        path: result,
-        type: isImg ? 'image' : 'file',
-      });
+  const handleAttachClick = async () => {
+    try {
+      const result = await SelectFile(); 
+      if (result) {
+        const fileName = result.split(/[\\/]/).pop() || 'file';
+        const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+        
+        setAttachment({
+          name: fileName,
+          path: result,
+          type: isImg ? 'image' : 'file',
+        });
+      }
+    } catch (err) {
+      console.error("File selection error:", err);
     }
-  } catch (err) {
-    console.error("File selection error:", err);
-  }
-};
+  };
 
   const removeAttachment = () => setAttachment(null);
 
@@ -60,14 +59,20 @@ const handleAttachClick = async () => {
         ? `FILE_PATH:${attachment.path}|CAPTION:${text}` 
         : text;
 
-      const encryptedHex = await EncryptMessage(recipientPubKey, payload);
+      let finalData: string;
+
+      if (isChannel) {
+        finalData = payload; 
+      } else {
+        finalData = await EncryptMessage(recipientPubKey, payload);
+      }
       
-      onSend(encryptedHex, !!attachment);
+      onSend(finalData, !!attachment);
 
       setText('');
       setAttachment(null);
     } catch (error) {
-      console.error("E2EE Encryption Error:", error);
+      console.error("Sending Error:", error);
     } finally {
       setIsEncrypting(false);
     }
@@ -98,7 +103,7 @@ const handleAttachClick = async () => {
         <button 
           className={`attach-btn ${attachment ? 'active' : ''}`} 
           onClick={handleAttachClick}
-          disabled={hasKeyError || isEncrypting}
+          disabled={(hasKeyError && !isChannel) || isEncrypting}
         >
           <Paperclip size={20} />
         </button>
@@ -109,12 +114,22 @@ const handleAttachClick = async () => {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={hasKeyError ? "Encryption key missing..." : "Write a message..."}
-            disabled={isEncrypting || hasKeyError}
+            placeholder={
+              hasKeyError && !isChannel 
+                ? "Encryption key missing..." 
+                : isChannel 
+                  ? "Broadcast to channel..." 
+                  : "Write an encrypted message..."
+            }
+            disabled={isEncrypting || (hasKeyError && !isChannel)}
           />
           
           <div className="security-indicator">
-            {hasKeyError ? (
+            {isChannel ? (
+              <div className="channel-mode-icon" title="Public Channel Mode">
+                <Globe size={14} className="text-blue" />
+              </div>
+            ) : hasKeyError ? (
               <ShieldAlert size={14} className="error-icon" />
             ) : (
               <div className="lock-status">
@@ -126,9 +141,9 @@ const handleAttachClick = async () => {
         </div>
 
         <button 
-          className={`send-btn ${(text.trim() || attachment) && !isEncrypting && !hasKeyError ? 'active' : ''}`} 
+          className={`send-btn ${(text.trim() || attachment) && !isEncrypting && (!hasKeyError || isChannel) ? 'active' : ''}`} 
           onClick={handleSend}
-          disabled={(!text.trim() && !attachment) || isEncrypting || hasKeyError}
+          disabled={(!text.trim() && !attachment) || isEncrypting || (hasKeyError && !isChannel)}
         >
           <SendHorizonal size={20} />
         </button>

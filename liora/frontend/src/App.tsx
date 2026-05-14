@@ -5,12 +5,13 @@ import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Contacts from './pages/Contacts';
 import SearchUser from './pages/SearchUser';
+import CreateChannel from './pages/CreateChannel';
+import Channel from './pages/Channel';
 import './App.css';
-
 import { GetMyInfo } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime'; 
 
-type Screen = 'register' | 'dashboard' | 'profile' | 'settings' | 'contacts' | 'search';
+type Screen = 'register' | 'dashboard' | 'profile' | 'settings' | 'contacts' | 'search' | 'create_channel' | 'channel';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('register');
@@ -85,6 +86,12 @@ function App() {
       }
       {screen === 'contacts' && <Contacts onClose={() => setScreen('dashboard')} />}
       {screen === 'search' && <SearchUser onClose={() => setScreen('dashboard')} />}
+      {screen === 'create_channel' && (<CreateChannel myID={myID} onClose={() => setScreen('dashboard')} onCreated={(newChannel) => {
+      console.log("Channel created successfully:", newChannel);
+      setScreen('dashboard');
+    }} 
+  />
+)}
     </div>
   );
 }

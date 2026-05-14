@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import MessageList from '../components/chat/MessageList';
 import ChatInput from '../components/chat/ChatInput';
-import { Phone, Video, MoreVertical, ShieldCheck } from 'lucide-react';
+import { Phone, Video, MoreVertical, ShieldCheck, Hash } from 'lucide-react';
 // @ts-ignore
 import { DecryptMessage } from '../../wailsjs/go/main/App'; 
 import '../styles/Chat.scss';
@@ -17,15 +17,23 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
   const [messages, setMessages] = useState<any[]>([]);
   const [isPartnerOnline, setIsPartnerOnline] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const partnerKey = activeChat?.public_id;
+  const isChannel = activeChat?.type === 'channel' || !!activeChat?.owner_id;
+  const chatID = isChannel ? activeChat.id.toString() : activeChat?.public_id;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleHeaderClick = () => {
+    if (!isChannel) {
+      onOpenProfile();
+    } else {
+      console.log("Channel details:", activeChat);
+    }
+  };
+
   useEffect(() => {
-    if (!partnerKey || !myID) return;
+    if (!chatID || !myID || isChannel) return;
 
     const channel = supabase.channel('online-status', {
       config: {
@@ -37,7 +45,7 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const isOnline = Object.values(state).some((presence: any) => 
-          presence.some((p: any) => p.user_id === partnerKey)
+          presence.some((p: any) => p.user_id === chatID)
         );
         setIsPartnerOnline(isOnline);
       })
@@ -50,26 +58,29 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
     return () => {
       channel.unsubscribe();
     };
-  }, [partnerKey, myID]);
+  }, [chatID, myID, isChannel]);
 
   useEffect(() => {
-    if (!activeChat || !partnerKey) return;
+    if (!activeChat || !chatID) return;
 
     const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .or(`and(sender_id.eq.${myID},recipient_id.eq.${partnerKey}),and(sender_id.eq.${partnerKey},recipient_id.eq.${myID})`)
-        .order('created_at', { ascending: true });
+      let query = supabase.from('messages').select('*');
+
+      if (isChannel) {
+        query = query.eq('recipient_id', chatID);
+      } else {
+        query = query.or(`and(sender_id.eq.${myID},recipient_id.eq.${chatID}),and(sender_id.eq.${chatID},recipient_id.eq.${myID})`);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: true });
 
       if (!error && data) {
         const decrypted = await Promise.all(data.map(async (msg) => {
           try {
-            const clearText = await DecryptMessage(partnerKey, msg.content);
+            const clearText = await DecryptMessage(chatID, msg.content);
             return { ...msg, content: clearText };
           } catch (err) {
-            console.error("Decryption failed:", err);
-            return { ...msg, content: "[🔒 Encrypted]" };
+            return { ...msg, content: msg.content }; 
           }
         }));
         setMessages(decrypted);
@@ -80,21 +91,23 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
     fetchMessages();
 
     const channel = supabase
-      .channel(`chat:${partnerKey}`)
+      .channel(`chat_realtime:${chatID}`)
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages' }, 
         async (payload) => {
           const newMsg = payload.new;
-          const isRelevant = 
-            (newMsg.sender_id === partnerKey && newMsg.recipient_id === myID) || 
-            (newMsg.sender_id === myID && newMsg.recipient_id === partnerKey);
+          
+          const isRelevant = isChannel 
+            ? newMsg.recipient_id === chatID 
+            : (newMsg.sender_id === chatID && newMsg.recipient_id === myID) || 
+              (newMsg.sender_id === myID && newMsg.recipient_id === chatID);
 
           if (isRelevant) {
             try {
-              const clearText = await DecryptMessage(partnerKey, newMsg.content);
+              const clearText = await DecryptMessage(chatID, newMsg.content);
               setMessages((prev) => [...prev, { ...newMsg, content: clearText }]);
-            } catch (e) {
-              setMessages((prev) => [...prev, { ...newMsg, content: "[🔒 New message]" }]);
+            } catch {
+              setMessages((prev) => [...prev, newMsg]);
             }
             setTimeout(scrollToBottom, 50);
           }
@@ -105,15 +118,15 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeChat, myID, partnerKey]);
+  }, [activeChat, myID, chatID, isChannel]);
 
   const handleSend = async (encryptedContent: string) => {
-    if (!partnerKey) return;
+    if (!chatID) return;
     
     const { error } = await supabase.from('messages').insert([
       {
         sender_id: myID,
-        recipient_id: partnerKey,
+        recipient_id: chatID,
         content: encryptedContent,
         is_read: false
       }
@@ -127,52 +140,59 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
   return (
     <div className="chat-active-interface animate-fade">
       <header className="chat-header glass-morphism">
-        <div className="header-info" onClick={onOpenProfile} style={{ cursor: 'pointer' }}>
+        <div 
+          className="header-info" 
+          onClick={handleHeaderClick} 
+          style={{ cursor: isChannel ? 'default' : 'pointer' }}
+        >
           <div className="avatar-mini">
-            {activeChat.avatar_url ? (
+            {isChannel ? (
+              <div className="channel-icon-wrapper">
+                <Hash size={20} />
+              </div>
+            ) : activeChat.avatar_url ? (
               <img 
                 src={activeChat.avatar_url} 
                 alt={activeChat.username} 
                 className="avatar-img"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  const parent = e.currentTarget.parentElement;
-                  if (parent) parent.innerText = activeChat.username?.slice(0, 2).toUpperCase() || "??";
-                }}
               />
             ) : (
               <span className="avatar-initials">
                 {activeChat.username?.slice(0, 2).toUpperCase() || "??"}
               </span>
             )}
-            <div className={`status-dot-mini ${isPartnerOnline ? 'online' : 'offline'}`}></div>
+            
+            {!isChannel && (
+              <div className={`status-dot-mini ${isPartnerOnline ? 'online' : 'offline'}`}></div>
+            )}
           </div>
 
           <div className="user-details">
             <div className="name-row">
-              <h3>{activeChat.username || "Unknown"}</h3>
-              {isPartnerOnline && <span className="online-label">online</span>}
+              <h3>{isChannel ? activeChat.name : (activeChat.username || "Unknown")}</h3>
+              {!isChannel && isPartnerOnline && <span className="online-label">online</span>}
             </div>
             <div className="status-container">
-              <ShieldCheck size={14} className={isPartnerOnline ? "text-green" : "text-blue"} />
+              <ShieldCheck 
+                size={14} 
+                className={(isPartnerOnline || isChannel) ? "text-green" : "text-blue"} 
+              />
               <span className="status-text">
-                {isPartnerOnline ? 'Secure Active Session' : 'End-to-end Encrypted'}
+                {isChannel ? 'Public Channel' : isPartnerOnline ? 'Secure Active Session' : 'Encrypted Chat'}
               </span>
             </div>
           </div>
         </div>
 
         <div className="header-actions">
-          <button className="action-btn" title="Voice Call">
-            <Phone size={20} />
-          </button>
-          <button className="action-btn" title="Video Call">
-            <Video size={20} />
-          </button>
-          <div className="divider-v"></div>
-          <button className="action-btn" title="More">
-            <MoreVertical size={20} />
-          </button>
+          {!isChannel && (
+            <>
+              <button className="action-btn" title="Voice Call"><Phone size={20} /></button>
+              <button className="action-btn" title="Video Call"><Video size={20} /></button>
+              <div className="divider-v"></div>
+            </>
+          )}
+          <button className="action-btn" title="More"><MoreVertical size={20} /></button>
         </div>
       </header>
 
@@ -181,7 +201,11 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
         <div ref={messagesEndRef} />
       </div>
       
-      <ChatInput onSend={handleSend} recipientPubKey={partnerKey} />
+      <ChatInput 
+        onSend={handleSend} 
+        recipientPubKey={chatID} 
+        isChannel={isChannel} 
+      />
     </div>
   );
 }
