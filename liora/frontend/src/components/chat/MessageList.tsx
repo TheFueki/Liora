@@ -67,7 +67,6 @@ export default function MessageList({ messages, myID }: MessageListProps) {
         );
       })}
 
-      {/* Рендер контекстного меню */}
       {contextMenu && (
         <div 
           className="custom-context-menu"

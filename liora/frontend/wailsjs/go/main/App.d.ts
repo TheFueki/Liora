@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {db} from '../models';
 
+export function CreateNewChannel(arg1:main.ChannelInfo):Promise<Record<string, any>>;
+
 export function CreateNewIdentity():Promise<string>;
 
 export function DecryptMessage(arg1:string,arg2:string):Promise<string>;
@@ -14,6 +16,8 @@ export function GetAvailableAccounts():Promise<Array<main.Account>>;
 export function GetChatHistory(arg1:string):Promise<Array<main.Message>>;
 
 export function GetLocalHistory(arg1:string):Promise<Array<db.LocalMessage>>;
+
+export function GetMessages(arg1:any):Promise<Array<main.Message>>;
 
 export function GetMyID():Promise<string>;
 

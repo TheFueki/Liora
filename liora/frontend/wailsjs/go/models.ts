@@ -39,6 +39,20 @@ export namespace main {
 	        this.avatarUrl = source["avatarUrl"];
 	    }
 	}
+	export class ChannelInfo {
+	    name: string;
+	    description: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChannelInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	    }
+	}
 	export class Message {
 	    id: string;
 	    sender_id: string;

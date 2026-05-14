@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"liora/backend/crypto"
 	"liora/backend/db"
+	"liora/backend/domains/channels"
 	"liora/backend/network"
 	"os"
 	"path/filepath"
@@ -42,9 +44,16 @@ type Message struct {
 }
 
 type App struct {
-	ctx    context.Context
-	client *supabase.Client
-	myID   string
+	ctx      context.Context
+	client   *supabase.Client
+	myID     string
+	DB       *sql.DB
+	Channels *channels.Service
+}
+
+type ChannelInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 func NewApp() *App {
@@ -443,6 +452,59 @@ func (a *App) uploadFileToStorage(filePath string) (string, error) {
 	publicUrlObj := bucket.GetPublicUrl(uniqueName, "")
 
 	return publicUrlObj.SignedURL, nil
+}
+
+func (a *App) CreateNewChannel(info ChannelInfo) (map[string]interface{}, error) {
+	if a.client == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	row := map[string]interface{}{
+		"name":        info.Name,
+		"description": info.Description,
+		"owner_id":    a.myID,
+		"created_at":  time.Now(),
+	}
+
+	var results []map[string]interface{}
+	_, err := a.client.From("channels").Insert(row, false, "", "", "").ExecuteTo(&results)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		return results[0], nil
+	}
+
+	row["owner_id"] = a.myID
+	return row, nil
+}
+
+func (a *App) GetMessages(channelID interface{}) ([]Message, error) {
+	if a.client == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	var messages []Message
+	_, err := a.client.From("messages").
+		Select("*", "exact", false).
+		Eq("channel_id", fmt.Sprintf("%v", channelID)).
+		Order("created_at", &postgrest.OrderOpts{Ascending: true}).
+		ExecuteTo(&messages)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch messages: %v", err)
+	}
+
+	for i := range messages {
+		decrypted, err := a.DecryptMessage(messages[i].SenderID, messages[i].Content)
+		if err == nil {
+			messages[i].Content = decrypted
+		}
+	}
+
+	return messages, nil
 }
 func (a *App) GetChatHistory(otherID string) ([]Message, error) {
 	if a.client == nil {
