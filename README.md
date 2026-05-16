@@ -66,22 +66,52 @@ Identity: Possession of the liora_identity.key file is the sole method of authen
 Privacy: Zero telemetry. No tracking of OS, usage metrics, or location data.
 
 
-# README
 
-## About
 
-This is the official Wails React-TS template.
+### Roadmap 
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+#### 1. Compilation and Data Flow Diagram
+```
+       [ Client / Frontend (Vite + React) ]
+                       │
+             Wails JavaScript Bridge
+                       │
+                       ▼
+       [ Backend Core (Go) ] ──(IPC)── [ Wails Runtime Environment ]
+               │
+               ├─► [ Cryptography / E2EE (Ed25519) ]
+               └─► [ Local Database / Storage (Dexie/SQLite) ]
 
-## Live Development
+```
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+#### 2. Pre-launch Environment Check
+Before starting, ensure that the versions meet the requirements:
 
-## Building
+* **Go:** `1.21+` (`go version`)
+* **Node.js:** `20.0.0+` (`node -v`)
+* **Wails CLI:** `2.12.0+` (`wails doctor`)
 
-To build a redistributable, production mode package, use `wails build`.
+
+#### 3. Step-by-Step Deployment Guide
+
+If the project is transferred to another PC or the cache is cleared, run this command sequence:
+
+```bash
+
+# Let’s change to the frontend directory and rebuild the dependencies according to the lockfile
+
+cd frontend
+
+npm ci
+# We ensure that the icon package is installed
+
+npm install lucide-react
+# We check if Vite compiles the project without Rollup errors
+
+npm run build
+# We return to the root directory and start build/dev
+
+cd ..
+
+wails dev
+```
