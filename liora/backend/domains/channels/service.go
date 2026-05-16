@@ -12,7 +12,7 @@ func NewService(repo *Repository) *Service {
 
 func (s *Service) CreateChannel(req CreateChannelRequest) (*Channel, error) {
 	if len(req.Name) < 3 {
-		return nil, errors.New("Name is too short")
+		return nil, errors.New("channel name is too short (min 3 characters)")
 	}
 
 	newChannel := &Channel{
@@ -29,4 +29,8 @@ func (s *Service) CreateChannel(req CreateChannelRequest) (*Channel, error) {
 
 	newChannel.ID = id
 	return newChannel, nil
+}
+
+func (s *Service) ListPublicChannels() ([]Channel, error) {
+	return s.repo.GetAll()
 }

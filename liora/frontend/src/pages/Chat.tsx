@@ -4,7 +4,8 @@ import MessageList from '../components/chat/MessageList';
 import ChatInput from '../components/chat/ChatInput';
 import { Phone, Video, MoreVertical, ShieldCheck, Hash } from 'lucide-react';
 // @ts-ignore
-import { DecryptMessage } from '../../wailsjs/go/main/App'; 
+import { DecryptMessage, SendMessage, GetMessages } from '../../wailsjs/go/main/App'; 
+import { useCacheStore } from '../components/services/cacheManager';
 import '../styles/Chat.scss';
 
 interface ChatProps {
@@ -19,6 +20,8 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isChannel = activeChat?.type === 'channel' || !!activeChat?.owner_id;
   const chatID = isChannel ? activeChat.id.toString() : activeChat?.public_id;
+
+  const { getMessages, saveMessages } = useCacheStore();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,28 +67,24 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
     if (!activeChat || !chatID) return;
 
     const fetchMessages = async () => {
-      let query = supabase.from('messages').select('*');
+      try {
+        const cachedMsgs = await getMessages(chatID.toString());
+        if (cachedMsgs && cachedMsgs.length > 0) {
+          setMessages(cachedMsgs);
+          setTimeout(scrollToBottom, 20);
+        }
 
-      if (isChannel) {
-        query = query.eq('recipient_id', chatID);
-      } else {
-        query = query.or(`and(sender_id.eq.${myID},recipient_id.eq.${chatID}),and(sender_id.eq.${chatID},recipient_id.eq.${myID})`);
+        const pubKey = isChannel ? "" : (activeChat?.public_id || ""); 
+        const networkData = await GetMessages(chatID.toString(), pubKey);
+        
+        if (networkData) {
+          setMessages(networkData);
+          await saveMessages(chatID.toString(), networkData);
+        }
+      } catch (err) {
+        console.error("Failed to fetch messages:", err);
       }
-
-      const { data, error } = await query.order('created_at', { ascending: true });
-
-      if (!error && data) {
-        const decrypted = await Promise.all(data.map(async (msg) => {
-          try {
-            const clearText = await DecryptMessage(chatID, msg.content);
-            return { ...msg, content: clearText };
-          } catch (err) {
-            return { ...msg, content: msg.content }; 
-          }
-        }));
-        setMessages(decrypted);
-      }
-      setTimeout(scrollToBottom, 100);
+      setTimeout(scrollToBottom, 50);
     };
 
     fetchMessages();
@@ -97,18 +96,28 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
         async (payload) => {
           const newMsg = payload.new;
           
+          if (newMsg.sender_id === myID) return;
           const isRelevant = isChannel 
-            ? newMsg.recipient_id === chatID 
-            : (newMsg.sender_id === chatID && newMsg.recipient_id === myID) || 
-              (newMsg.sender_id === myID && newMsg.recipient_id === chatID);
+            ? newMsg.channel_id === chatID 
+            : (newMsg.sender_id === chatID && newMsg.recipient_id === myID);
 
           if (isRelevant) {
-            try {
-              const clearText = await DecryptMessage(chatID, newMsg.content);
-              setMessages((prev) => [...prev, { ...newMsg, content: clearText }]);
-            } catch {
-              setMessages((prev) => [...prev, newMsg]);
+            let processedMsg = { ...newMsg };
+
+            if (!isChannel) {
+              try {
+                const clearText = await DecryptMessage(chatID, newMsg.content);
+                processedMsg.content = clearText;
+              } catch (e) {
+                console.error("Decryption failed for realtime message", e);
+              }
             }
+            
+            // Обновляем UI
+            setMessages((prev) => [...prev, processedMsg]);
+            // Кладем новое входящее сообщение в IndexedDB кэш
+            await saveMessages(chatID.toString(), [processedMsg]);
+            
             setTimeout(scrollToBottom, 50);
           }
         }
@@ -118,21 +127,45 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeChat, myID, chatID, isChannel]);
+  }, [activeChat, myID, chatID, isChannel, getMessages, saveMessages]);
 
-  const handleSend = async (encryptedContent: string) => {
+  const handleSend = async (content: string) => {
     if (!chatID) return;
-    
-    const { error } = await supabase.from('messages').insert([
-      {
-        sender_id: myID,
-        recipient_id: chatID,
-        content: encryptedContent,
-        is_read: false
-      }
-    ]);
-    
-    if (error) console.error("Send error:", error);
+
+    const optimisticMessage = {
+      id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, 
+      sender_id: myID,
+      recipient_id: chatID,
+      channel_id: isChannel ? chatID : null, 
+      content: content,                    
+      is_read: false,
+      created_at: new Date().toISOString(),
+      isOptimistic: true                     
+    };
+
+    // Оптимистично выводим в интерфейс
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setTimeout(scrollToBottom, 50); 
+
+    try {
+      // Отправляем через Go-бэкенд
+      await SendMessage(chatID, content);
+      
+      // Снимаем флаг оптимистичного сообщения
+      const confirmedMessage = { ...optimisticMessage, isOptimistic: false };
+      
+      setMessages((prev) => 
+        prev.map((msg) => msg.id === optimisticMessage.id ? confirmedMessage : msg)
+      );
+
+      // Сохраняем наше успешно отправленное сообщение в локальный кэш
+      await saveMessages(chatID.toString(), [confirmedMessage]);
+
+    } catch (err) {
+      console.error("Send error via Wails:", err);
+      // Если ошибка — удаляем из UI
+      setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+    }
   };
 
   if (!activeChat) return null;

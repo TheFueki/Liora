@@ -1,131 +1,296 @@
+$bg-card: rgba(7, 7, 10, 0.7); 
+$border-color: rgba(255, 255, 255, 0.08);
+$accent-color: #7d5fff; 
+$text-main: #f5f6fa; 
+$text-muted: #808e9b;
+$glass-blur: blur(20px);
+
 .search-modal-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(10px);
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: $glass-blur;
+  -webkit-backdrop-filter: $glass-blur;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding-top: 8vh;
-  z-index: 200;
+  z-index: 1000;
+  animation: fadeIn 0.25s ease-out;
 }
 
 .search-modal-card {
   width: 100%;
-  max-width: 600px;
-  background: #0d0d0d;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  position: relative;
-  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.8);
-  overflow: visible !important; 
+  max-width: 550px;
+  max-height: 80vh;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 
+              inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
 
-  .search-header {
+.search-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid $border-color;
+  background: rgba(255, 255, 255, 0.02);
+
+  .input-wrapper {
+    position: relative;
+    flex: 1;
     display: flex;
     align-items: center;
-    padding: 18px 24px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    gap: 15px;
-    position: relative;
-    z-index: 10; 
 
-    .input-wrapper {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: #555;
-
-      input {
-        flex: 1;
-        background: transparent;
-        border: none;
-        color: #fff;
-        font-size: 16px;
-        outline: none;
-        &::placeholder { color: #444; }
-      }
-
-      .spinner { animation: spin 1s linear infinite; color: #00ff88; }
+    svg, .spinner {
+      position: absolute;
+      left: 14px;
+      color: $text-muted;
+      pointer-events: none;
     }
 
-    .close-btn {
-      background: none; border: none; color: #444;
-      cursor: pointer; transition: 0.2s;
-      &:hover { color: #ff4444; }
+    .spinner {
+      animation: spin 1s linear infinite;
+      color: $accent-color;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 16px 12px 44px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid $border-color;
+      border-radius: 10px;
+      color: $text-main;
+      font-size: 15px;
+      outline: none;
+      transition: all 0.2s ease;
+
+      &:focus {
+        border-color: rgba($accent-color, 0.5);
+        background: rgba(0, 0, 0, 0.6);
+        box-shadow: 0 0 15px rgba($accent-color, 0.15);
+      }
+
+      &::placeholder {
+        color: rgba($text-muted, 0.6);
+      }
     }
   }
 
-  .search-results-area {
-    max-height: 480px;
-    overflow-y: auto;
-    overflow-x: visible; 
-    padding: 12px;
-    position: relative;
-    z-index: 20;  
+  .close-btn {
+    background: none;
+    border: none;
+    color: $text-muted;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-    &::-webkit-scrollbar { width: 4px; }
-    &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
+    &:hover {
+      color: $text-main; 
+      background: rgba(255, 255, 255, 0.05);
+    }
+  }
+}
 
-    .search-item {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 16px;
-      border-radius: 14px;
-      cursor: pointer;
-      transition: all 0.2s;
+.search-results-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  max-height: 60vh;
 
-      &:hover {
-        background: rgba(255, 255, 255, 0.03);
-        z-index: 100;  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    &:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+}
+
+.search-item-container {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  background: transparent;
+  transition: background 0.25s ease;
+
+  &.expanded {
+    background: rgba(255, 255, 255, 0.01);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.03);
+    
+    .expand-profile-btn {
+      color: $text-main; 
+    }
+  }
+
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+
+    .avatar-small {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid $border-color;
+      flex-shrink: 0;
+
+      .avatar-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
+    }
 
-      .user-info {
+    .text-details {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+
+      .username {
+        color: $text-main; 
+        font-weight: 500;
+        font-size: 14.5px;
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 6px;
 
-        .avatar-small {
-          width: 40px; height: 40px;
-          border-radius: 10px;
-          overflow: hidden;
-          background: #1a1a1a;
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          img { width: 100%; height: 100%; object-fit: cover; }
-        }
-
-        .text-details {
-          .username {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            color: #eee;
-            font-weight: 500;
-          }
-          .public-id {
-            display: block;
-            font-size: 11px;
-            color: #444;
-            font-family: monospace;
-          }
+        .verified-icon {
+          flex-shrink: 0;
         }
       }
 
-      .add-icon { 
-        opacity: 0; 
-        transition: 0.2s; 
-        color: #555; 
-        &:hover { color: #00ff88; }
+      .public-id {
+        color: $text-muted;
+        font-size: 12px;
+        font-family: monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     }
   }
 }
 
+.expand-profile-btn {
+  background: none;
+  border: none;
+  color: $text-muted;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &:hover {
+    color: $accent-color !important;
+    background: rgba($accent-color, 0.08);
+    transform: scale(1.05);
+  }
+
+  &.active {
+    color: $accent-color !important;
+    background: rgba($accent-color, 0.12);
+    transform: rotate(90deg);
+  }
+}
+
+.inline-mini-profile-wrapper {
+  padding: 4px 16px 16px 70px;
+  animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100%;
+  box-sizing: border-box;
+
+  > div {
+    position: relative !important;
+    top: initial !important;
+    left: initial !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    background: rgba(0, 0, 0, 0.25) !important;
+    border: 1px solid $border-color !important;
+    border-radius: 12px !important;
+    pointer-events: auto !important;
+  }
+}
+
 .no-results, .search-placeholder {
-  padding: 60px 20px;
   text-align: center;
-  color: #333;
+  padding: 40px 20px;
+  color: $text-muted;
   font-size: 14px;
+}
+
+.search-placeholder {
+  opacity: 0.6;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes slideDown {
+  from { 
+    opacity: 0; 
+    transform: translateY(-8px);
+    max-height: 0;
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0);
+    max-height: 500px;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

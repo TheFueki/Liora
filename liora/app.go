@@ -39,6 +39,7 @@ type Message struct {
 	ID          string    `json:"id"`
 	SenderID    string    `json:"sender_id"`
 	RecipientID string    `json:"recipient_id"`
+	ChannelID   *string   `json:"channel_id"`
 	Content     string    `json:"content"`
 	CreatedAt   time.Time `json:"created_at"`
 }
@@ -53,7 +54,9 @@ type App struct {
 
 type ChannelInfo struct {
 	Name        string `json:"name"`
+	Username    string `json:"username"`
 	Description string `json:"description"`
+	AvatarURL   string `json:"avatar_url"`
 }
 
 func NewApp() *App {
@@ -377,53 +380,6 @@ func (a *App) SearchUsers(query string) ([]map[string]interface{}, error) {
 
 	return results, err
 }
-
-func (a *App) SendMessage(recipientID string, content string) error {
-	if a.client == nil {
-		return fmt.Errorf("database not connected")
-	}
-
-	finalContent := content
-
-	if strings.HasPrefix(content, "FILE_PATH:") {
-		parts := strings.Split(content, "|CAPTION:")
-		filePath := strings.TrimPrefix(parts[0], "FILE_PATH:")
-		caption := ""
-		if len(parts) > 1 {
-			caption = parts[1]
-		}
-		fileURL, err := a.uploadFileToStorage(filePath)
-		if err != nil {
-			return fmt.Errorf("failed to upload file: %v", err)
-		}
-
-		finalContent = fmt.Sprintf("IMAGE_URL:%s|CAPTION:%s", fileURL, caption)
-	}
-
-	encryptedHex, err := a.EncryptMessage(recipientID, finalContent)
-	if err != nil {
-		return fmt.Errorf("encryption failed: %v", err)
-	}
-	_, _, err = a.client.From("messages").Insert(map[string]interface{}{
-		"sender_id":    a.myID,
-		"recipient_id": recipientID,
-		"content":      encryptedHex,
-		"is_read":      false,
-	}, false, "", "", "").Execute()
-
-	if err != nil {
-		return err
-	}
-
-	db.SaveMessageLocal(db.LocalMessage{
-		Sender:    a.myID,
-		Payload:   finalContent,
-		Timestamp: time.Now().Unix(),
-	})
-
-	return nil
-}
-
 func (a *App) uploadFileToStorage(filePath string) (string, error) {
 	fileData, err := os.ReadFile(filePath)
 	if err != nil {
@@ -461,9 +417,11 @@ func (a *App) CreateNewChannel(info ChannelInfo) (map[string]interface{}, error)
 
 	row := map[string]interface{}{
 		"name":        info.Name,
+		"username":    info.Username,
 		"description": info.Description,
 		"owner_id":    a.myID,
 		"created_at":  time.Now(),
+		"avatar_url":  info.AvatarURL,
 	}
 
 	var results []map[string]interface{}
@@ -480,32 +438,127 @@ func (a *App) CreateNewChannel(info ChannelInfo) (map[string]interface{}, error)
 	row["owner_id"] = a.myID
 	return row, nil
 }
+func (a *App) checkIfChannel(id string) bool {
+	var result []map[string]interface{}
+	_, err := a.client.From("channels").
+		Select("id", "exact", false).
+		Eq("id", id).
+		ExecuteTo(&result)
 
-func (a *App) GetMessages(channelID interface{}) ([]Message, error) {
+	if err != nil || len(result) == 0 {
+		return false
+	}
+	return true
+}
+
+func (a *App) GetMessages(targetID string, targetPubKey string) ([]Message, error) {
 	if a.client == nil {
 		return nil, fmt.Errorf("database not connected")
 	}
 
 	var messages []Message
-	_, err := a.client.From("messages").
-		Select("*", "exact", false).
-		Eq("channel_id", fmt.Sprintf("%v", channelID)).
-		Order("created_at", &postgrest.OrderOpts{Ascending: true}).
-		ExecuteTo(&messages)
+	var err error
+
+	if a.checkIfChannel(targetID) {
+		_, err = a.client.From("messages").
+			Select("*", "exact", false).
+			Eq("channel_id", targetID).
+			Order("created_at", &postgrest.OrderOpts{Ascending: true}).
+			ExecuteTo(&messages)
+	} else {
+		filterQuery := fmt.Sprintf("and(sender_id.eq.%s,recipient_id.eq.%s),and(sender_id.eq.%s,recipient_id.eq.%s)", a.myID, targetID, targetID, a.myID)
+
+		_, err = a.client.From("messages").
+			Select("*", "exact", false).
+			Or(filterQuery, "").
+			Filter("channel_id", "is", "null").
+			Order("created_at", &postgrest.OrderOpts{Ascending: true}).
+			ExecuteTo(&messages)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch messages: %v", err)
 	}
 
 	for i := range messages {
-		decrypted, err := a.DecryptMessage(messages[i].SenderID, messages[i].Content)
-		if err == nil {
-			messages[i].Content = decrypted
+		if messages[i].ChannelID != nil && *messages[i].ChannelID != "" {
+			continue
+		}
+		if targetPubKey != "" {
+			decrypted, err := a.DecryptMessage(targetPubKey, messages[i].Content)
+			if err == nil {
+				messages[i].Content = decrypted
+			} else {
+				messages[i].Content = "🔒 [Decryption Error]"
+			}
 		}
 	}
 
 	return messages, nil
 }
+
+func (a *App) SendMessage(recipientID string, content string) error {
+	if a.client == nil {
+		return fmt.Errorf("database not connected")
+	}
+
+	finalContent := content
+
+	if strings.HasPrefix(content, "FILE_PATH:") {
+		parts := strings.Split(content, "|CAPTION:")
+		filePath := strings.TrimPrefix(parts[0], "FILE_PATH:")
+		caption := ""
+		if len(parts) > 1 {
+			caption = parts[1]
+		}
+		fileURL, err := a.uploadFileToStorage(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to upload file: %v", err)
+		}
+
+		finalContent = fmt.Sprintf("IMAGE_URL:%s|CAPTION:%s", fileURL, caption)
+	}
+
+	isChannel := a.checkIfChannel(recipientID)
+
+	var payload map[string]interface{}
+
+	if isChannel {
+		payload = map[string]interface{}{
+			"sender_id":    a.myID,
+			"recipient_id": recipientID,
+			"channel_id":   recipientID,
+			"content":      finalContent,
+			"is_read":      false,
+		}
+	} else {
+		encryptedHex, err := a.EncryptMessage(recipientID, finalContent)
+		if err != nil {
+			return fmt.Errorf("encryption failed: %v", err)
+		}
+		payload = map[string]interface{}{
+			"sender_id":    a.myID,
+			"recipient_id": recipientID,
+			"content":      encryptedHex,
+			"is_read":      false,
+			"channel_id":   nil,
+		}
+	}
+
+	_, _, err := a.client.From("messages").Insert(payload, false, "", "", "").Execute()
+	if err != nil {
+		return err
+	}
+
+	db.SaveMessageLocal(db.LocalMessage{
+		Sender:    a.myID,
+		Payload:   finalContent,
+		Timestamp: time.Now().Unix(),
+	})
+
+	return nil
+}
+
 func (a *App) GetChatHistory(otherID string) ([]Message, error) {
 	if a.client == nil {
 		return nil, fmt.Errorf("no client")

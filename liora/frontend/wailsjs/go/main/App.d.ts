@@ -17,7 +17,7 @@ export function GetChatHistory(arg1:string):Promise<Array<main.Message>>;
 
 export function GetLocalHistory(arg1:string):Promise<Array<db.LocalMessage>>;
 
-export function GetMessages(arg1:any):Promise<Array<main.Message>>;
+export function GetMessages(arg1:string,arg2:string):Promise<Array<main.Message>>;
 
 export function GetMyID():Promise<string>;
 

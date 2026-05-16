@@ -41,7 +41,9 @@ export namespace main {
 	}
 	export class ChannelInfo {
 	    name: string;
+	    username: string;
 	    description: string;
+	    avatar_url: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ChannelInfo(source);
@@ -50,13 +52,16 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
+	        this.username = source["username"];
 	        this.description = source["description"];
+	        this.avatar_url = source["avatar_url"];
 	    }
 	}
 	export class Message {
 	    id: string;
 	    sender_id: string;
 	    recipient_id: string;
+	    channel_id?: string;
 	    content: string;
 	    // Go type: time
 	    created_at: any;
@@ -70,6 +75,7 @@ export namespace main {
 	        this.id = source["id"];
 	        this.sender_id = source["sender_id"];
 	        this.recipient_id = source["recipient_id"];
+	        this.channel_id = source["channel_id"];
 	        this.content = source["content"];
 	        this.created_at = this.convertValues(source["created_at"], null);
 	    }
