@@ -1,5 +1,6 @@
 import { useState, KeyboardEvent, useEffect } from 'react';
 import { SendHorizonal, Paperclip, Lock, ShieldAlert, X, FileText, Image as ImageIcon, Globe } from 'lucide-react';
+// @ts-ignore
 import { SelectFile } from '../../../wailsjs/go/main/App'; 
 
 interface Attachment {
@@ -11,7 +12,7 @@ interface Attachment {
 
 interface ChatInputProps {
   recipientPubKey: string; 
-  onSend: (data: string, isFile: boolean) => void;
+  onSend: (data: string) => void; 
   isChannel?: boolean;
 }
 
@@ -22,7 +23,7 @@ export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatIn
   const [attachment, setAttachment] = useState<Attachment | null>(null);
 
   useEffect(() => {
-    if (!recipientPubKey && !isChannel) {
+    if (!isChannel && (!recipientPubKey || recipientPubKey.trim() === '')) {
       setHasKeyError(true);
     } else {
       setHasKeyError(false);
@@ -49,25 +50,25 @@ export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatIn
 
   const removeAttachment = () => setAttachment(null);
 
-const handleSend = async () => {
-  if ((!text.trim() && !attachment) || isProcessing || hasKeyError) return;
+  const handleSend = async () => {
+    if ((!text.trim() && !attachment) || isProcessing || (hasKeyError && !isChannel)) return;
 
-  setIsProcessing(true);
-  try {
-    const payload = attachment 
-      ? `FILE_PATH:${attachment.path}|CAPTION:${text}` 
-      : text;
+    setIsProcessing(true);
+    try {
+      const payload = attachment 
+        ? `FILE_PATH:${attachment.path}|CAPTION:${text}` 
+        : text;
 
-    onSend(payload, !!attachment);
+      onSend(payload);
 
-    setText('');
-    setAttachment(null);
-  } catch (error) {
-    console.error("Sending Error:", error);
-  } finally {
-    setIsProcessing(false);
-  }
-};
+      setText('');
+      setAttachment(null);
+    } catch (error) {
+      console.error("Sending Error:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -90,7 +91,7 @@ const handleSend = async () => {
         </div>
       )}
 
-      <div className={`chat-input-wrapper glass-morphism ${hasKeyError ? 'key-warning' : ''}`}>
+      <div className={`chat-input-wrapper glass-morphism ${hasKeyError && !isChannel ? 'key-warning' : ''}`}>
         <button 
           className={`attach-btn ${attachment ? 'active' : ''}`} 
           onClick={handleAttachClick}

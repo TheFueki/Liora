@@ -36,9 +36,12 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
   };
 
   useEffect(() => {
-    if (!chatID || !myID || isChannel) return;
+    if (!chatID || !myID || isChannel) {
+      setIsPartnerOnline(false);
+      return;
+    }
 
-    const channel = supabase.channel('online-status', {
+    const channel = supabase.channel(`online-status:${chatID}`, {
       config: {
         presence: { key: myID },
       },
@@ -59,83 +62,123 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
       });
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [chatID, myID, isChannel]);
 
   useEffect(() => {
-    if (!activeChat || !chatID) return;
+  if (!activeChat || !chatID || !myID) {
+    setMessages([]);
+    return;
+  }
 
-    const fetchMessages = async () => {
-      try {
-        const cachedMsgs = await getMessages(chatID.toString());
-        if (cachedMsgs && cachedMsgs.length > 0) {
-          setMessages(cachedMsgs);
-          setTimeout(scrollToBottom, 20);
-        }
+  let isMounted = true;
+  const currentChatID = chatID.toString();
+  
+  setMessages([]);
 
-        const pubKey = isChannel ? "" : (activeChat?.public_id || ""); 
-        const networkData = await GetMessages(chatID.toString(), pubKey);
-        
-        if (networkData) {
-          setMessages(networkData);
-          await saveMessages(chatID.toString(), networkData);
-        }
-      } catch (err) {
-        console.error("Failed to fetch messages:", err);
+  const loadInitialCache = async () => {
+    try {
+      const cachedMsgs = await getMessages(myID, currentChatID);
+      if (isMounted && cachedMsgs && cachedMsgs.length > 0) {
+        setMessages(cachedMsgs);
+        setTimeout(scrollToBottom, 20);
       }
-      setTimeout(scrollToBottom, 50);
-    };
+    } catch (err) {
+      console.error("Failed to fetch cached messages:", err);
+    }
+  };
 
-    fetchMessages();
+  const syncWithNetwork = async () => {
+    try {
+      const pubKey = isChannel ? "" : currentChatID; 
+      const networkData = await GetMessages(currentChatID, pubKey);
+      
+      if (isMounted && networkData) {
+        setMessages(networkData);
+        await saveMessages(myID, currentChatID, networkData);
+        setTimeout(scrollToBottom, 50);
+      }
+    } catch (err) {
+      console.error("Failed to fetch network messages:", err);
+    }
+  };
 
-    const channel = supabase
-      .channel(`chat_realtime:${chatID}`)
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'messages' }, 
-        async (payload) => {
-          const newMsg = payload.new;
-          
-          if (newMsg.sender_id === myID) return;
-          const isRelevant = isChannel 
-            ? newMsg.channel_id === chatID 
-            : (newMsg.sender_id === chatID && newMsg.recipient_id === myID);
+  loadInitialCache().then(() => {
+    if (isMounted) syncWithNetwork();
+  });
 
-          if (isRelevant) {
-            let processedMsg = { ...newMsg };
+  const channel = supabase
+    .channel(`chat_realtime:${currentChatID}_${myID}`)
+    .on('postgres_changes', 
+      { event: 'INSERT', schema: 'public', table: 'messages' }, 
+      async (payload) => {
+        const newMsg = payload.new;
+        
+        if (!isMounted) return;
+        
+        const isRelevant = isChannel 
+          ? newMsg.channel_id?.toString() === currentChatID 
+          : ((newMsg.sender_id?.toString() === currentChatID && newMsg.recipient_id === myID) || 
+             (newMsg.sender_id?.toString() === myID && newMsg.recipient_id === currentChatID));
 
-            if (!isChannel) {
-              try {
-                const clearText = await DecryptMessage(chatID, newMsg.content);
+        if (isRelevant) {
+          let processedMsg = { ...newMsg };
+
+          if (!isChannel) {
+            try {
+              const decryptionKey = newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id;
+
+              const clearText = await DecryptMessage(decryptionKey.toString(), newMsg.content.toString());
+              if (clearText) {
                 processedMsg.content = clearText;
-              } catch (e) {
-                console.error("Decryption failed for realtime message", e);
               }
+            } catch (e) {
+              console.error("Crypto layer decryption failure:", e);
+              processedMsg.content = "🔒 [Decryption Error]";
             }
-            
-            setMessages((prev) => [...prev, processedMsg]);
-            await saveMessages(chatID.toString(), [processedMsg]);
-            
+          }
+          
+          if (isMounted) {
+            setMessages((prev) => {
+              const existingIdx = prev.findIndex(m => m.isOptimistic && m.content === processedMsg.content);
+              
+              if (existingIdx !== -1) {
+                const updated = [...prev];
+                updated[existingIdx] = { ...processedMsg, isOptimistic: false };
+                saveMessages(myID, currentChatID, updated);
+                return updated;
+              }
+
+              if (prev.some(m => m.id === processedMsg.id)) return prev;
+              
+              const updated = [...prev, processedMsg];
+              saveMessages(myID, currentChatID, updated);
+              return updated;
+            });
             setTimeout(scrollToBottom, 50);
           }
         }
-      )
-      .subscribe();
+      }
+    )
+    .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [activeChat, myID, chatID, isChannel, getMessages, saveMessages]);
+  return () => {
+    isMounted = false;
+    supabase.removeChannel(channel);
+  };
+}, [activeChat, myID, chatID, isChannel]);
 
   const handleSend = async (content: string) => {
-    if (!chatID) return;
+    if (!chatID || !myID) return;
+    const currentChatID = chatID.toString();
 
     const optimisticMessage = {
-      id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, 
+      id: crypto.randomUUID ? crypto.randomUUID() : `temp-${Date.now()}`, 
       sender_id: myID,
-      recipient_id: chatID,
-      channel_id: isChannel ? chatID : null, 
-      content: content,                    
+      recipient_id: currentChatID,
+      channel_id: isChannel ? currentChatID : null, 
+      content: content,                     
       is_read: false,
       created_at: new Date().toISOString(),
       isOptimistic: true                     
@@ -145,15 +188,15 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
     setTimeout(scrollToBottom, 50); 
 
     try {
-      await SendMessage(chatID, content);
+      await SendMessage(currentChatID, content);
       
       const confirmedMessage = { ...optimisticMessage, isOptimistic: false };
       
-      setMessages((prev) => 
-        prev.map((msg) => msg.id === optimisticMessage.id ? confirmedMessage : msg)
-      );
-
-      await saveMessages(chatID.toString(), [confirmedMessage]);
+      setMessages((prev) => {
+        const updated = prev.map((msg) => msg.id === optimisticMessage.id ? confirmedMessage : msg);
+        saveMessages(myID, currentChatID, updated);
+        return updated;
+      });
 
     } catch (err) {
       console.error("Send error via Wails:", err);

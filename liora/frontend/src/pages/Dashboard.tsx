@@ -143,7 +143,7 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
     if (msgError || !messages) {
       console.error("Error loading messages:", msgError);
       if (currentFetchId === fetchCounterRef.current) {
-        setCache(myID, { channels: loadedChannels });
+        setCache(myID, { ...useCacheStore.getState(), channels: loadedChannels });
       }
       return;
     }
@@ -207,24 +207,36 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
   useEffect(() => {
     fetchAllData();
 
-    const channelSubscription = supabase.channel('dashboard-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
-        const newMsg = payload.new;
-        if (newMsg.sender_id === myID || newMsg.recipient_id === myID) {
-          const partnerId = newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id;
-          let preview = "Encrypted message";
-          try {
-            const decrypted = await DecryptMessage(partnerId, newMsg.content);
-            if (decrypted) preview = decrypted;
-          } catch(e) {}
-          
-          updateLastMessage(partnerId, preview, newMsg.created_at);
+    const channelSubscription = supabase.channel(`dashboard-updates:${myID}`)
+  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
+    const newMsg = payload.new;
+    
+    const isChannelMsg = !!newMsg.channel_id;
+    const isDirectMsg = newMsg.sender_id === myID || newMsg.recipient_id === myID;
+
+    if (isDirectMsg || isChannelMsg) {
+      const partnerId = isChannelMsg 
+        ? newMsg.channel_id.toString()
+        : (newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id);
+
+      let preview = isChannelMsg ? newMsg.content : "Encrypted message";
+
+      if (!isChannelMsg) {
+        try {
+          const decrypted = await DecryptMessage(partnerId, newMsg.content);
+          if (decrypted) preview = decrypted;
+        } catch(e) {
+          console.error("Dashboard decryption error:", e);
         }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, () => {
-        fetchAllData();
-      })
-      .subscribe();
+      }
+      
+      await updateLastMessage(myID, partnerId, preview, newMsg.created_at);
+    }
+  })
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, () => {
+    fetchAllData();
+  })
+  .subscribe();
 
     return () => {
       supabase.removeChannel(channelSubscription);
@@ -392,11 +404,9 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
         </div>
 
         <div className="conversations">
-          {!isLoaded && filteredList.length === 0 ? (
-            <div className="empty-list-info"><p>Loading cache...</p></div>
-          ) : filteredList.length === 0 ? (
+          {filteredList.length === 0 ? (
             <div className="empty-list-info">
-              <p>No conversations found</p>
+              <p>{!isLoaded ? "Loading..." : "No conversations found"}</p>
             </div>
           ) : (
             filteredList.map((item) => (

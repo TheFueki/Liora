@@ -22,8 +22,8 @@ class LioraSecureDatabase extends Dexie {
   conversations!: Table<LocalConversation, string>;
   messages!: Table<LocalMessage, string>;
 
-  constructor() {
-    super('LioraSecureDB');
+  constructor(myID: string) {
+    super(`LioraSecureDB_${myID}`);
 
     this.version(1).stores({
       conversations: 'displayID, last_message_time',
@@ -32,4 +32,14 @@ class LioraSecureDatabase extends Dexie {
   }
 }
 
-export const db = new LioraSecureDatabase();
+let activeDB: LioraSecureDatabase | null = null;
+
+export const getDB = (myID: string): LioraSecureDatabase => {
+  if (!activeDB || activeDB.name !== `LioraSecureDB_${myID}`) {
+    if (activeDB) {
+      activeDB.close();
+    }
+    activeDB = new LioraSecureDatabase(myID);
+  }
+  return activeDB;
+};

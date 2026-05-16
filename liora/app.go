@@ -36,12 +36,13 @@ type Account struct {
 }
 
 type Message struct {
-	ID          string    `json:"id"`
-	SenderID    string    `json:"sender_id"`
-	RecipientID string    `json:"recipient_id"`
-	ChannelID   *string   `json:"channel_id"`
-	Content     string    `json:"content"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          string  `json:"id"`
+	SenderID    string  `json:"sender_id"`
+	RecipientID string  `json:"recipient_id"`
+	ChannelID   *string `json:"channel_id"`
+	Content     string  `json:"content"`
+	IsRead      bool    `json:"is_read"`
+	CreatedAt   string  `json:"created_at"`
 }
 
 type App struct {
@@ -189,31 +190,43 @@ func (a *App) EncryptMessage(theirPubKeyHex string, plaintext string) (string, e
 }
 
 func (a *App) DecryptMessage(senderPubKeyHex string, ciphertextHex string) (string, error) {
+	fmt.Printf("[DEBUG-CRYPTO] === НАЧАЛО ДЕШИФРОВАНИЯ ===\n")
+	fmt.Printf("[DEBUG-CRYPTO] Мой Public ID (a.myID): %s\n", a.myID)
+	fmt.Printf("[DEBUG-CRYPTO] Переданный ключ отправителя (senderPubKeyHex): %s\n", senderPubKeyHex)
+	fmt.Printf("[DEBUG-CRYPTO] Длина шифротекста (ciphertextHex): %d символов\n", len(ciphertextHex))
+
 	senderKey, err := crypto.DecodeHexKey(senderPubKeyHex)
 	if err != nil {
+		fmt.Printf("[DEBUG-CRYPTO] Ошибка DecodeHexKey: %v\n", err)
 		return "[Key Error]", nil
 	}
 
 	myPrivKey, err := a.loadMyPrivateKey()
 	if err != nil {
+		fmt.Printf("[DEBUG-CRYPTO] Ошибка loadMyPrivateKey: %v\n", err)
 		return "[Identity Error]", nil
 	}
 
 	ciphertext, err := hex.DecodeString(ciphertextHex)
 	if err != nil {
+		fmt.Printf("[DEBUG-CRYPTO] Ошибка DecodeString (не валидный Hex): %v\n", err)
 		return "[Format Error]", nil
 	}
 
 	shared, err := crypto.GenerateSharedSecret(myPrivKey, senderKey)
 	if err != nil {
+		fmt.Printf("[DEBUG-CRYPTO] Ошибка GenerateSharedSecret (Diffie-Hellman паника): %v\n", err)
 		return "[Crypto Error]", nil
 	}
+	fmt.Printf("[DEBUG-CRYPTO] Shared Secret успешно вычислен (Hex): %s\n", hex.EncodeToString(shared[:4])) // логируем первые 4 байта для безопасности
 
 	plaintext, err := crypto.DecryptWithSharedKey(ciphertext, shared)
 	if err != nil {
+		fmt.Printf("[DEBUG-CRYPTO] Критическая ошибка DecryptWithSharedKey: %v (Неверный ключ или битый буфер)\n", err)
 		return "[Decryption Error]", nil
 	}
 
+	fmt.Printf("[DEBUG-CRYPTO] УСПЕХ: Сообщение расшифровано\n")
 	return string(plaintext), nil
 }
 
@@ -484,8 +497,15 @@ func (a *App) GetMessages(targetID string, targetPubKey string) ([]Message, erro
 		if messages[i].ChannelID != nil && *messages[i].ChannelID != "" {
 			continue
 		}
-		if targetPubKey != "" {
-			decrypted, err := a.DecryptMessage(targetPubKey, messages[i].Content)
+		var decryptionKey string
+		if messages[i].SenderID == a.myID {
+			decryptionKey = messages[i].RecipientID
+		} else {
+			decryptionKey = messages[i].SenderID
+		}
+
+		if decryptionKey != "" {
+			decrypted, err := a.DecryptMessage(decryptionKey, messages[i].Content)
 			if err == nil {
 				messages[i].Content = decrypted
 			} else {

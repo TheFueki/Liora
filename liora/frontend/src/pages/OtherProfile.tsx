@@ -55,7 +55,7 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
           </div>
           
           <div className="header-text">
-            <h2>{user.username || "Anonymous"}</h2>
+            <h2>@{user.username || "Anonymous"}</h2>
             <div className="id-badge" onClick={handleCopyId} title="Click to copy Public ID">
               <Fingerprint size={14} className="fingerprint-icon" />
               <code>

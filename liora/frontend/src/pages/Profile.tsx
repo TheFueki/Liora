@@ -11,49 +11,72 @@ interface ProfileProps {
 }
 
 export default function Profile({ myID, onBack }: ProfileProps) {
-  const { cachedProfile, setCachedProfile } = useProfileStore();
+  const { getProfileForUser, setProfileForUser } = useProfileStore();
+  const cachedProfile = getProfileForUser(myID);
 
   const [username, setUsername] = useState(cachedProfile?.username || '');
   const [bio, setBio] = useState(cachedProfile?.bio || '');
   const [avatar, setAvatar] = useState(cachedProfile?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${myID}`);
+  const [avatarTs, setAvatarTs] = useState(Date.now());
   
   const [isLoading, setIsLoading] = useState(!cachedProfile);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialLoadedRef = useRef(false);
 
   useEffect(() => {
+    const currentCached = getProfileForUser(myID);
+    setUsername(currentCached?.username || '');
+    setBio(currentCached?.bio || '');
+    setAvatar(currentCached?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${myID}`);
+    setAvatarTs(Date.now());
+    setIsLoading(!currentCached);
+    setHasChanges(false);
+    initialLoadedRef.current = false;
+  }, [myID]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     const loadProfile = async () => {
       try {
-        const data = await GetProfile();
-        if (data) {
+        const data = await GetProfile(); 
+        if (isMounted && data) {
           const freshData = {
             username: data.username || 'Anonymous',
             bio: data.bio || '',
             avatar_url: data.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${myID}`
           };
 
-          setUsername(freshData.username);
-          setBio(freshData.bio);
-          setAvatar(freshData.avatar_url);
+          setProfileForUser(myID, freshData);
 
-          setCachedProfile(freshData);
+          if (!initialLoadedRef.current) {
+            setUsername(freshData.username);
+            setBio(freshData.bio);
+            setAvatar(freshData.avatar_url);
+            setAvatarTs(Date.now());
+            initialLoadedRef.current = true;
+          }
         }
       } catch (err) {
         console.error("Failed to load profile from Go layer:", err);
-        if (!cachedProfile) {
-          setUsername('Anonymous');
-          setAvatar(`https://api.dicebear.com/7.x/bottts/svg?seed=${myID}`);
-        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
-    loadProfile();
-  }, [myID, setCachedProfile, cachedProfile]);
 
-  const processAndCompressImage = (file: File, maxDimension = 400, quality = 0.85): Promise<File> => {
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [myID]); 
+
+  const processAndCompressImage = (file: File, targetSize = 200, quality = 0.8): Promise<File> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -64,23 +87,8 @@ export default function Profile({ myID, onBack }: ProfileProps) {
         
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > maxDimension) {
-              height = Math.round((height * maxDimension) / width);
-              width = maxDimension;
-            }
-          } else {
-            if (height > maxDimension) {
-              width = Math.round((width * maxDimension) / height);
-              height = maxDimension;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
+          canvas.width = targetSize;
+          canvas.height = targetSize;
 
           const ctx = canvas.getContext('2d');
           if (!ctx) {
@@ -88,16 +96,32 @@ export default function Profile({ myID, onBack }: ProfileProps) {
             return;
           }
 
+          let srcX = 0;
+          let srcY = 0;
+          let srcSize = Math.min(img.width, img.height);
+
+          if (img.width > img.height) {
+            srcX = Math.round((img.width - srcSize) / 2);
+          } else {
+            srcY = Math.round((img.height - srcSize) / 2);
+          }
+
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(img, 0, 0, width, height);
+          
+          ctx.drawImage(
+            img,
+            srcX, srcY, srcSize, srcSize,
+            0, 0, targetSize, targetSize
+          );
+
           canvas.toBlob(
             (blob) => {
               if (!blob) {
                 reject(new Error("Canvas blob generation failed"));
                 return;
               }
-              const processedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+              const processedFile = new File([blob], `${myID}.jpg`, {
                 type: "image/jpeg",
                 lastModified: Date.now(),
               });
@@ -116,13 +140,15 @@ export default function Profile({ myID, onBack }: ProfileProps) {
 
   const uploadToSupabase = async (file: File): Promise<string | null> => {
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${myID}-${Date.now()}.${fileExt}`;
+      const fileName = `${myID}-${Date.now()}.jpg`;
       const filePath = `${fileName}`;
 
       const { data, error } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
 
       if (error) throw error;
 
@@ -141,16 +167,19 @@ export default function Profile({ myID, onBack }: ProfileProps) {
   const handleSave = async () => {
     if (!hasChanges) return;
     setIsSaving(true);
+    
     try {
       await UpdateProfile(username, bio, avatar);
       
-      setCachedProfile({
+      setProfileForUser(myID, {
         username,
         bio,
         avatar_url: avatar
       });
 
+      setAvatarTs(Date.now()); 
       setHasChanges(false);
+      initialLoadedRef.current = true; 
     } catch (err) {
       console.error("Protocol Sync Failed", err);
     } finally {
@@ -163,12 +192,12 @@ export default function Profile({ myID, onBack }: ProfileProps) {
     if (file) {
       setIsSaving(true);
       try {
-        const compressedFile = await processAndCompressImage(file, 500, 0.85);
-
+        const compressedFile = await processAndCompressImage(file, 200, 0.8);
         const publicUrl = await uploadToSupabase(compressedFile);
         
         if (publicUrl) {
-          setAvatar(publicUrl); 
+          setAvatar(publicUrl);
+          setAvatarTs(Date.now());
           setHasChanges(true);
         }
       } catch (err) {
@@ -182,6 +211,24 @@ export default function Profile({ myID, onBack }: ProfileProps) {
 
   const resetAvatar = () => {
     setAvatar(`https://api.dicebear.com/7.x/bottts/svg?seed=${Math.random()}`);
+    setAvatarTs(Date.now());
+    setHasChanges(true);
+  };
+
+  const getAvatarSrc = () => {
+    if (avatar.includes('supabase.co')) {
+      return `${avatar}?t=${avatarTs}`;
+    }
+    return avatar;
+  };
+
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUsername(e.target.value);
+    setHasChanges(true);
+  };
+
+  const handleBioChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setBio(e.target.value);
     setHasChanges(true);
   };
 
@@ -195,29 +242,25 @@ export default function Profile({ myID, onBack }: ProfileProps) {
         <button className="back-btn-circle" onClick={onBack}>
           <ArrowLeft size={20} />
         </button>
-        <div className="security-tag">
-          <ShieldCheck size={14} />
-          <span>Liora E2EE Active</span>
-        </div>
       </header>
 
       <div className="profile-container glass-morphism">
         <div className="avatar-master-section">
           <div className={`avatar-frame ${isSaving ? 'syncing' : ''}`}>
-  <img 
-    src={avatar.includes('supabase.co') ? `${avatar}?t=${Date.now()}` : avatar} 
-    alt="Identity" 
-    onError={(e) => (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/bottts/svg?seed=${myID}`}
-  />
-  <div className="avatar-overlay">
-    <button onClick={() => fileInputRef.current?.click()} className="action-btn" disabled={isSaving}>
-      <Camera size={18} />
-    </button>
-    <button onClick={resetAvatar} className="action-btn" disabled={isSaving}>
-      <RotateCcw size={18} />
-    </button>
-  </div>
-</div>
+            <img 
+              src={getAvatarSrc()}
+              alt="Identity" 
+              onError={(e) => (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/bottts/svg?seed=${myID}`}
+            />
+            <div className="avatar-overlay">
+              <button onClick={() => fileInputRef.current?.click()} className="action-btn" disabled={isSaving}>
+                <Camera size={18} />
+              </button>
+              <button onClick={resetAvatar} className="action-btn" disabled={isSaving}>
+                <RotateCcw size={18} />
+              </button>
+            </div>
+          </div>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" style={{ display: 'none' }} />
         </div>
 
@@ -227,7 +270,7 @@ export default function Profile({ myID, onBack }: ProfileProps) {
             <input 
               type="text" 
               value={username} 
-              onChange={(e) => { setUsername(e.target.value); setHasChanges(true); }}
+              onChange={handleUsernameChange}
               spellCheck={false}
             />
           </div>
@@ -236,7 +279,7 @@ export default function Profile({ myID, onBack }: ProfileProps) {
             <label>Bio</label>
             <textarea 
               value={bio} 
-              onChange={(e) => { setBio(e.target.value); setHasChanges(true); }}
+              onChange={handleBioChange}
               placeholder="Tell us about yourself..."
             />
           </div>

@@ -8,20 +8,28 @@ interface ProfileData {
 }
 
 interface ProfileState {
-  cachedProfile: ProfileData | null;
-  setCachedProfile: (data: ProfileData) => void;
-  clearProfileCache: () => void;
+  profiles: Record<string, ProfileData>; 
+  getProfileForUser: (myID: string) => ProfileData | null;
+  setProfileForUser: (myID: string, data: ProfileData) => void;
+  clearProfileCache: (myID: string) => void;
 }
 
 export const useProfileStore = create<ProfileState>()(
   persist(
-    (set) => ({
-      cachedProfile: null,
-      setCachedProfile: (data) => set({ cachedProfile: data }),
-      clearProfileCache: () => set({ cachedProfile: null }),
+    (set, get) => ({
+      profiles: {},
+      getProfileForUser: (myID) => get().profiles[myID] || null,
+      setProfileForUser: (myID, data) => set((state) => ({
+        profiles: { ...state.profiles, [myID]: data }
+      })),
+      clearProfileCache: (myID) => set((state) => {
+        const updatedProfiles = { ...state.profiles };
+        delete updatedProfiles[myID];
+        return { profiles: updatedProfiles };
+      }),
     }),
     {
-      name: 'liora_profile_cache', 
+      name: 'liora_multi_profile_cache',
     }
   )
 );

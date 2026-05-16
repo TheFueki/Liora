@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { db, LocalConversation, LocalMessage } from './db';
+import { getDB, LocalConversation, LocalMessage } from './db';
 
 interface CacheState {
   conversations: LocalConversation[];
@@ -8,10 +8,11 @@ interface CacheState {
   
   loadFromStorage: (myID: string) => Promise<void>;
   setCache: (myID: string, data: { conversations?: any[], channels?: any[] }) => Promise<void>;
-  updateLastMessage: (displayID: string, text: string, time: string) => Promise<void>;
+  updateLastMessage: (myID: string, displayID: string, text: string, time: string) => Promise<void>;
   
-  saveMessages: (chatId: string, messages: any[]) => Promise<void>;
-  getMessages: (chatId: string) => Promise<LocalMessage[]>;
+  saveMessages: (myID: string, chatId: string, messages: any[]) => Promise<void>;
+  getMessages: (myID: string, chatId: string) => Promise<LocalMessage[]>;
+  clearState: () => void;
 }
 
 export const useCacheStore = create<CacheState>((set, get) => ({
@@ -21,6 +22,7 @@ export const useCacheStore = create<CacheState>((set, get) => ({
 
   loadFromStorage: async (myID) => {
     try {
+      const db = getDB(myID);
       const allConvs = await db.conversations
         .orderBy('last_message_time')
         .reverse()
@@ -37,6 +39,7 @@ export const useCacheStore = create<CacheState>((set, get) => ({
 
   setCache: async (myID, data) => {
     try {
+      const db = getDB(myID);
       const currentConvs = data.conversations ?? [];
       const currentChans = data.channels ?? [];
       
@@ -59,8 +62,9 @@ export const useCacheStore = create<CacheState>((set, get) => ({
     }
   },
 
-  updateLastMessage: async (displayID, text, time) => {
+  updateLastMessage: async (myID, displayID, text, time) => {
     try {
+      const db = getDB(myID);
       const existing = await db.conversations.get(displayID);
       if (existing) {
         await db.conversations.update(displayID, {
@@ -91,8 +95,9 @@ export const useCacheStore = create<CacheState>((set, get) => ({
     }
   },
 
-  saveMessages: async (chatId, messages) => {
+  saveMessages: async (myID, chatId, messages) => {
     try {
+      const db = getDB(myID);
       const localMsgs: LocalMessage[] = messages.map(m => ({
         id: m.id || `${chatId}_${new Date(m.created_at).getTime()}`,
         chat_id: chatId,
@@ -107,8 +112,9 @@ export const useCacheStore = create<CacheState>((set, get) => ({
     }
   },
 
-  getMessages: async (chatId) => {
+  getMessages: async (myID, chatId) => {
     try {
+      const db = getDB(myID);
       return await db.messages
         .where('chat_id')
         .equals(chatId)
@@ -117,5 +123,7 @@ export const useCacheStore = create<CacheState>((set, get) => ({
       console.error("Failed to fetch cached messages", e);
       return [];
     }
-  }
+  },
+
+  clearState: () => set({ conversations: [], channels: [], isLoaded: false })
 }));
