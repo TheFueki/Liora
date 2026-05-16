@@ -20,7 +20,6 @@ export const CreateChannel: React.FC<CreateChannelProps> = ({ onClose, onCreated
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleUsernameChange = (val: string) => {
-        // Мягкая очистка: убираем @, приводим к нижнему регистру и удаляем все пробелы
         let clean = val.replace('@', '').toLowerCase().replace(/\s+/g, '');
         setFormData({ ...formData, username: clean });
     };
@@ -66,13 +65,10 @@ export const CreateChannel: React.FC<CreateChannelProps> = ({ onClose, onCreated
 
         const finalUsername = formData.username.trim();
 
-        // 1. Проверка на длину юзернейма
         if (finalUsername.length < 3 || finalUsername.length > 32) {
             setErrorText("Юзернейм должен быть от 3 до 32 символов.");
             return;
         }
-
-        // 2. Строгая проверка на разрешенные символы (только латиница, цифры и нижнее подчеркивание)
         const usernameRegex = /^[a-z0-9_]+$/;
         if (!usernameRegex.test(finalUsername)) {
             setErrorText("Юзернейм может содержать только латинские буквы, цифры и знак подчеркивания (_).");
@@ -90,7 +86,7 @@ export const CreateChannel: React.FC<CreateChannelProps> = ({ onClose, onCreated
                 name: formData.name.trim(),
                 username: finalUsername,
                 description: formData.description.trim(),
-                avatar_url: uploadedAvatarUrl ?? "" // Предотвращаем падение TS, заменяя null на ""
+                avatar_url: uploadedAvatarUrl ?? ""
             };
 
             const createdChannel = await CreateNewChannel(payload);

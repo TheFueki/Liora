@@ -64,12 +64,11 @@ export default function MessageList({ messages, myID }: MessageListProps) {
   return (
     <div className="messages-container">
       {messages.map((msg, index) => {
-        // ЗАЩИТА: Если сообщение null или undefined, полностью игнорируем его, избегая краша приложения
         if (!msg) return null;
 
         const isMine = msg.sender_id === myID;
         const isMenuOpen = contextMenu?.msg?.id === msg.id;
-        const isPending = !!msg.isOptimistic; // Флаг оптимистичного UI (сообщение еще отправляется)
+        const isPending = !!msg.isOptimistic;
         
         const isFromChannel = msg.channel_id !== null && msg.channel_id !== undefined && msg.channel_id !== "";
 
@@ -93,7 +92,6 @@ export default function MessageList({ messages, myID }: MessageListProps) {
               className={`message-wrapper ${isMine ? 'mine' : 'theirs'} ${isMenuOpen ? 'selected' : ''}`}
               onContextMenu={(e) => handleContextMenu(e, msg)}
             >
-              {/* Класс 'pending' добавляется, если сообщение находится в процессе доставки бэкендом */}
               <div className={`message-bubble ${isMine ? 'glass-morphism-blue' : 'glass-morphism'} ${isPending ? 'pending' : ''}`}>
                 
                 {isFromChannel && !isMine && (
@@ -111,7 +109,6 @@ export default function MessageList({ messages, myID }: MessageListProps) {
                   {isMine && (
                     <div className="status-icons">
                       {isPending ? (
-                        // Иконка часиков для оптимистичного состояния отправки
                         <Clock size={12} className="status-check pending-clock" />
                       ) : msg.is_read ? (
                         <CheckCheck size={14} className="status-check read" strokeWidth={3} />

@@ -81,3 +81,7 @@ frontend/wailsjs/*
 .docker
 docker-compose.override.yml
 bin/
+liora_identity.key
+liora_vault.db
+frontend/node_modules/
+/build/bin/

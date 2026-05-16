@@ -113,9 +113,7 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
               }
             }
             
-            // Обновляем UI
             setMessages((prev) => [...prev, processedMsg]);
-            // Кладем новое входящее сообщение в IndexedDB кэш
             await saveMessages(chatID.toString(), [processedMsg]);
             
             setTimeout(scrollToBottom, 50);
@@ -143,27 +141,22 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
       isOptimistic: true                     
     };
 
-    // Оптимистично выводим в интерфейс
     setMessages((prev) => [...prev, optimisticMessage]);
     setTimeout(scrollToBottom, 50); 
 
     try {
-      // Отправляем через Go-бэкенд
       await SendMessage(chatID, content);
       
-      // Снимаем флаг оптимистичного сообщения
       const confirmedMessage = { ...optimisticMessage, isOptimistic: false };
       
       setMessages((prev) => 
         prev.map((msg) => msg.id === optimisticMessage.id ? confirmedMessage : msg)
       );
 
-      // Сохраняем наше успешно отправленное сообщение в локальный кэш
       await saveMessages(chatID.toString(), [confirmedMessage]);
 
     } catch (err) {
       console.error("Send error via Wails:", err);
-      // Если ошибка — удаляем из UI
       setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
     }
   };

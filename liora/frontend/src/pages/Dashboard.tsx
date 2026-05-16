@@ -85,7 +85,6 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
   const [activeTab, setActiveTab] = useState('messages'); 
   const [messageFilter, setMessageFilter] = useState<'direct' | 'groups' | 'channels'>('direct');
   
-  // Достаем реактивные списки и методы управления кэшем из Zustand стора
   const { conversations, channels, isLoaded, loadFromStorage, setCache, updateLastMessage } = useCacheStore();
   
   const [avatar, setAvatar] = useState<string | undefined>(undefined);
@@ -112,7 +111,6 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
     }
   }, [profile, myID]);
 
-  // Восстановление локального асинхронного кэша при смене пользователя (myID)
   useEffect(() => {
     loadFromStorage(myID);
   }, [myID, loadFromStorage]);
@@ -196,13 +194,11 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
         };
       }));
 
-      // Сортировка на фронтенде нужна только для первичного наката из сети в стейт
       const sorted = enriched.sort((a, b) => 
         new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime()
       );
       
       if (currentFetchId === fetchCounterRef.current) {
-        // Запись результатов в IndexedDB и обновление Zustand-стейта
         setCache(myID, { conversations: sorted, channels: loadedChannels });
       }
     }
@@ -214,7 +210,6 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
     const channelSubscription = supabase.channel('dashboard-updates')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
         const newMsg = payload.new;
-        // Умный инкрементальный апдейт вместо тяжелого перезапроса всей БД
         if (newMsg.sender_id === myID || newMsg.recipient_id === myID) {
           const partnerId = newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id;
           let preview = "Encrypted message";
