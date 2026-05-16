@@ -1,7 +1,6 @@
 import { useState, KeyboardEvent, useEffect } from 'react';
 import { SendHorizonal, Paperclip, Lock, ShieldAlert, X, FileText, Image as ImageIcon, Globe } from 'lucide-react';
-import { EncryptMessage, SelectFile } from '../../../wailsjs/go/main/App'; 
-import * as runtime from '../../../wailsjs/runtime/runtime'; 
+import { SelectFile } from '../../../wailsjs/go/main/App'; 
 
 interface Attachment {
   name: string;
@@ -18,7 +17,7 @@ interface ChatInputProps {
 
 export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatInputProps) {
   const [text, setText] = useState('');
-  const [isEncrypting, setIsEncrypting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); 
   const [hasKeyError, setHasKeyError] = useState(false);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
 
@@ -50,33 +49,25 @@ export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatIn
 
   const removeAttachment = () => setAttachment(null);
 
-  const handleSend = async () => {
-    if ((!text.trim() && !attachment) || isEncrypting || hasKeyError) return;
+const handleSend = async () => {
+  if ((!text.trim() && !attachment) || isProcessing || hasKeyError) return;
 
-    setIsEncrypting(true);
-    try {
-      const payload = attachment 
-        ? `FILE_PATH:${attachment.path}|CAPTION:${text}` 
-        : text;
+  setIsProcessing(true);
+  try {
+    const payload = attachment 
+      ? `FILE_PATH:${attachment.path}|CAPTION:${text}` 
+      : text;
 
-      let finalData: string;
+    onSend(payload, !!attachment);
 
-      if (isChannel) {
-        finalData = payload; 
-      } else {
-        finalData = await EncryptMessage(recipientPubKey, payload);
-      }
-      
-      onSend(finalData, !!attachment);
-
-      setText('');
-      setAttachment(null);
-    } catch (error) {
-      console.error("Sending Error:", error);
-    } finally {
-      setIsEncrypting(false);
-    }
-  };
+    setText('');
+    setAttachment(null);
+  } catch (error) {
+    console.error("Sending Error:", error);
+  } finally {
+    setIsProcessing(false);
+  }
+};
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -103,7 +94,7 @@ export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatIn
         <button 
           className={`attach-btn ${attachment ? 'active' : ''}`} 
           onClick={handleAttachClick}
-          disabled={(hasKeyError && !isChannel) || isEncrypting}
+          disabled={(hasKeyError && !isChannel) || isProcessing}
         >
           <Paperclip size={20} />
         </button>
@@ -121,7 +112,7 @@ export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatIn
                   ? "Broadcast to channel..." 
                   : "Write an encrypted message..."
             }
-            disabled={isEncrypting || (hasKeyError && !isChannel)}
+            disabled={isProcessing || (hasKeyError && !isChannel)}
           />
           
           <div className="security-indicator">
@@ -132,18 +123,18 @@ export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatIn
             ) : hasKeyError ? (
               <ShieldAlert size={14} className="error-icon" />
             ) : (
-              <div className="lock-status">
+              <div className="lock-status" title="End-to-End Encrypted Session">
                 <Lock size={12} strokeWidth={3} />
-                {isEncrypting && <span className="encrypting-loader"></span>}
+                {isProcessing && <span className="encrypting-loader"></span>}
               </div>
             )}
           </div>
         </div>
 
         <button 
-          className={`send-btn ${(text.trim() || attachment) && !isEncrypting && (!hasKeyError || isChannel) ? 'active' : ''}`} 
+          className={`send-btn ${(text.trim() || attachment) && !isProcessing && (!hasKeyError || isChannel) ? 'active' : ''}`} 
           onClick={handleSend}
-          disabled={(!text.trim() && !attachment) || isEncrypting || (hasKeyError && !isChannel)}
+          disabled={(!text.trim() && !attachment) || isProcessing || (hasKeyError && !isChannel)}
         >
           <SendHorizonal size={20} />
         </button>

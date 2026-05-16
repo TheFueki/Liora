@@ -16,12 +16,14 @@ import { supabase } from '../lib/supabaseClient';
 // @ts-ignore
 import { SearchUsers, GetAvailableAccounts, SwitchToAccount, DecryptMessage } from '../../wailsjs/go/main/App';
 import Contacts from './Contacts';
+import DiscordIcon from './DiscordIcon';
 import Chat from './Chat';
 import OtherProfile from './OtherProfile';
 import SearchUser from './SearchUser';
 import Settings from './Settings'; 
 import CreateChannel from './CreateChannel';
 import Channel from './Channel';
+import { useCacheStore } from '../components/services/cacheManager';
 import '../styles/Dashboard.scss';
 import userPhoto from '../assets/liora1.png';
 
@@ -37,22 +39,6 @@ interface DashboardProps {
   profile: any;
   onLogout: () => void; 
 }
-
-const saveDashboardCache = (myID: string, data: { conversations: any[], channels: any[], profile: any }) => {
-  const cache = {
-    timestamp: Date.now(),
-    conversations: data.conversations,
-    channels: data.channels,
-    profile: data.profile
-  };
-  localStorage.setItem(`liora_full_cache_${myID}`, JSON.stringify(cache));
-};
-
-const DiscordIcon = ({ size = 22 }) => (
-  <svg width={size} height={size} viewBox="0 0 127.14 96.36" fill="#5865F2" xmlns="http://www.w3.org/2000/svg">
-    <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.73,32.98-1.86,57.21.35,81c11.1,8.19,21.89,13.2,32.46,16.45a75.6,75.6,0,0,0,7.57-12.33A66.59,66.59,0,0,1,29.83,79.08c.88-.65,1.74-1.33,2.58-2.05,21.08,9.76,43.91,9.76,64.73,0a35.53,35.53,0,0,0,2.58,2.05,66.1,66.1,0,0,1-10.56,6.07,75.62,75.62,0,0,0,7.57,12.33c10.58-3.25,21.37-8.26,32.46-16.45C130.58,52.25,124.3,28.33,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5.07-12.72,11.41-12.72S54,46,53.86,53,48.82,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5.07-12.72,11.41-12.72S96.18,46,96,53,91,65.69,84.69,65.69Z"/>
-  </svg>
-);
 
 function AccountSwitcher({ onSelect, onAddNew }: { onSelect: (id: string) => void, onAddNew: () => void }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -98,15 +84,10 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
   const CACHE_KEY = useMemo(() => `liora_convs_${myID}`, [myID]);
   const [activeTab, setActiveTab] = useState('messages'); 
   const [messageFilter, setMessageFilter] = useState<'direct' | 'groups' | 'channels'>('direct');
-  const [conversations, setConversations] = useState<any[]>(() => {
-  const saved = localStorage.getItem(`liora_full_cache_${myID}`);
-  return saved ? JSON.parse(saved).conversations : [];
-});
-
-const [channels, setChannels] = useState<any[]>(() => {
-  const saved = localStorage.getItem(`liora_full_cache_${myID}`);
-  return saved ? JSON.parse(saved).channels : [];
-});
+  
+  // Достаем реактивные списки и методы управления кэшем из Zustand стора
+  const { conversations, channels, isLoaded, loadFromStorage, setCache, updateLastMessage } = useCacheStore();
+  
   const [avatar, setAvatar] = useState<string | undefined>(undefined);
   const [viewingUser, setViewingUser] = useState<any | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -120,6 +101,8 @@ const [channels, setChannels] = useState<any[]>(() => {
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
+  const fetchCounterRef = useRef(0);
+
   useEffect(() => {
     const generateDicebear = (id: string) => `https://api.dicebear.com/7.x/bottts/svg?seed=${id}`;
     if (profile?.avatar_url && profile.avatar_url.trim() !== "") {
@@ -129,21 +112,28 @@ const [channels, setChannels] = useState<any[]>(() => {
     }
   }, [profile, myID]);
 
+  // Восстановление локального асинхронного кэша при смене пользователя (myID)
+  useEffect(() => {
+    loadFromStorage(myID);
+  }, [myID, loadFromStorage]);
+
   const fetchAllData = async () => {
     console.log("Fetching all dashboard data...");
+    const currentFetchId = ++fetchCounterRef.current;
 
     const { data: chanData, error: chanError } = await supabase
       .from('channels')
       .select('*');
 
+    let loadedChannels: any[] = [];
     if (!chanError && chanData) {
-      setChannels(chanData.map(c => ({
+      loadedChannels = chanData.map(c => ({
         ...c,
         type: 'channel',
         displayID: `channel_${c.id}`, 
         username: c.name,
         last_message: "Public Channel Content"
-      })));
+      }));
     }
 
     const { data: messages, error: msgError } = await supabase
@@ -152,17 +142,33 @@ const [channels, setChannels] = useState<any[]>(() => {
       .or(`sender_id.eq.${myID},recipient_id.eq.${myID}`)
       .order('created_at', { ascending: false });
 
-    if (msgError || !messages) return;
+    if (msgError || !messages) {
+      console.error("Error loading messages:", msgError);
+      if (currentFetchId === fetchCounterRef.current) {
+        setCache(myID, { channels: loadedChannels });
+      }
+      return;
+    }
 
     const partnersMap = new Map();
     messages.forEach(m => {
       const partnerId = m.sender_id === myID ? m.recipient_id : m.sender_id;
-      if (!partnersMap.has(partnerId)) {
-        partnersMap.set(partnerId, { last_content: m.content, last_time: m.created_at });
+      
+      if (partnerId && partnerId !== myID) {
+        if (!partnersMap.has(partnerId)) {
+          partnersMap.set(partnerId, { last_content: m.content, last_time: m.created_at });
+        }
       }
     });
     
     const uniquePartnerIds = Array.from(partnersMap.keys());
+    
+    if (uniquePartnerIds.length === 0) {
+      if (currentFetchId === fetchCounterRef.current) {
+        setCache(myID, { conversations: [], channels: loadedChannels });
+      }
+      return;
+    }
     
     const { data: profilesData, error: profError } = await supabase
       .from('profiles')
@@ -183,17 +189,22 @@ const [channels, setChannels] = useState<any[]>(() => {
 
         return {
           ...user,
-          type: 'direct',
+          type: 'direct', 
           displayID: user.public_id,
           last_message: preview,
           last_message_time: msgData.last_time
         };
       }));
 
+      // Сортировка на фронтенде нужна только для первичного наката из сети в стейт
       const sorted = enriched.sort((a, b) => 
         new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime()
       );
-      setConversations(sorted);
+      
+      if (currentFetchId === fetchCounterRef.current) {
+        // Запись результатов в IndexedDB и обновление Zustand-стейта
+        setCache(myID, { conversations: sorted, channels: loadedChannels });
+      }
     }
   };
 
@@ -201,8 +212,19 @@ const [channels, setChannels] = useState<any[]>(() => {
     fetchAllData();
 
     const channelSubscription = supabase.channel('dashboard-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-        fetchAllData();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
+        const newMsg = payload.new;
+        // Умный инкрементальный апдейт вместо тяжелого перезапроса всей БД
+        if (newMsg.sender_id === myID || newMsg.recipient_id === myID) {
+          const partnerId = newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id;
+          let preview = "Encrypted message";
+          try {
+            const decrypted = await DecryptMessage(partnerId, newMsg.content);
+            if (decrypted) preview = decrypted;
+          } catch(e) {}
+          
+          updateLastMessage(partnerId, preview, newMsg.created_at);
+        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, () => {
         fetchAllData();
@@ -212,7 +234,7 @@ const [channels, setChannels] = useState<any[]>(() => {
     return () => {
       supabase.removeChannel(channelSubscription);
     };
-  }, [myID]);
+  }, [myID, updateLastMessage]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -228,11 +250,17 @@ const [channels, setChannels] = useState<any[]>(() => {
   }, []);
 
   const filteredList = useMemo(() => {
-    if (messageFilter === 'direct') return conversations;
     if (messageFilter === 'channels') return channels;
     if (messageFilter === 'groups') return []; 
+    
+    if (messageFilter === 'direct') {
+      if (activeChat && activeChat.type === 'direct' && !conversations.some(c => c.displayID === activeChat.displayID)) {
+        return [activeChat, ...conversations];
+      }
+      return conversations;
+    }
     return [];
-  }, [messageFilter, conversations, channels]);
+  }, [messageFilter, conversations, channels, activeChat]);
 
   const handleActionClick = (action: string) => {
     setIsActionMenuOpen(false);
@@ -279,50 +307,37 @@ const [channels, setChannels] = useState<any[]>(() => {
         </div>
 
         <nav className="side-nav">
-          <button 
-            className={activeTab === 'messages' ? 'active' : ''} 
-            onClick={() => setActiveTab('messages')}
-          >
+          <button className={activeTab === 'messages' ? 'active' : ''} onClick={() => setActiveTab('messages')}>
             <MessageSquarePlus size={22} />
             <span className="tooltip">Messages</span>
           </button>
           
-          <button 
-            className={activeTab === 'bookmarks' ? 'active' : ''} 
-            onClick={() => setActiveTab('bookmarks')}
-          >
+          <button className={activeTab === 'contacts' ? 'active' : ''} onClick={() => setActiveTab('contacts')}>
+            <Users size={22} />
+            <span className="tooltip">Contacts</span>
+          </button>
+
+          <button className={activeTab === 'bookmarks' ? 'active' : ''} onClick={() => setActiveTab('bookmarks')}>
             <Bookmark size={22} />
             <span className="tooltip">Saved</span>
           </button>
 
-          <button 
-            className={activeTab === 'music' ? 'active' : ''} 
-            onClick={() => setActiveTab('music')}
-          >
+          <button className={activeTab === 'music' ? 'active' : ''} onClick={() => setActiveTab('music')}>
             <Music size={22} />
             <span className="tooltip">Music</span>
           </button>
 
-          <button 
-            className={activeTab === 'explore' ? 'active' : ''} 
-            onClick={() => setActiveTab('explore')}
-          >
+          <button className={activeTab === 'explore' ? 'active' : ''} onClick={() => setActiveTab('explore')}>
             <Compass size={22} />
             <span className="tooltip">Explore</span>
           </button>
 
-          <button 
-            className={activeTab === 'Drive' ? 'active' : ''} 
-            onClick={() => setActiveTab('Drive')}
-          >
+          <button className={activeTab === 'Drive' ? 'active' : ''} onClick={() => setActiveTab('Drive')}>
             <HardDrive size={22} />
             <span className="tooltip">Drive</span>
           </button>
 
-          <button 
-            className={activeTab === 'RSS' ? 'active' : ''} 
-            onClick={() => setActiveTab('RSS')}
-          >
+          <button className={activeTab === 'RSS' ? 'active' : ''} onClick={() => setActiveTab('RSS')}>
             <Rss size={22} />
             <span className="tooltip">RSS</span>
           </button>
@@ -369,35 +384,22 @@ const [channels, setChannels] = useState<any[]>(() => {
         </header>
 
         <div className="message-type-switcher">
-          <button 
-            className={messageFilter === 'direct' ? 'active' : ''} 
-            onClick={() => setMessageFilter('direct')}
-          >
-            Dm
-          </button>
-          <button 
-            className={messageFilter === 'groups' ? 'active' : ''} 
-            onClick={() => setMessageFilter('groups')}
-          >
-            Groups
-          </button>
-          <button 
-            className={messageFilter === 'channels' ? 'active' : ''} 
-            onClick={() => setMessageFilter('channels')}
-          >
-            Channels
-          </button>
+          <button className={messageFilter === 'direct' ? 'active' : ''} onClick={() => setMessageFilter('direct')}>Dm</button>
+          <button className={messageFilter === 'groups' ? 'active' : ''} onClick={() => setMessageFilter('groups')}>Groups</button>
+          <button className={messageFilter === 'channels' ? 'active' : ''} onClick={() => setMessageFilter('channels')}>Channels</button>
         </div>
 
         <div className="search-box" onClick={() => setIsSearchOpen(true)}>
-        <div className="search-icon">
-         <Search size={16} />
-        </div>
-        <input type="text" placeholder="Search identities..." readOnly />
+          <div className="search-icon">
+            <Search size={16} />
+          </div>
+          <input type="text" placeholder="Search identities..." readOnly />
         </div>
 
         <div className="conversations">
-          {filteredList.length === 0 ? (
+          {!isLoaded && filteredList.length === 0 ? (
+            <div className="empty-list-info"><p>Loading cache...</p></div>
+          ) : filteredList.length === 0 ? (
             <div className="empty-list-info">
               <p>No conversations found</p>
             </div>
@@ -409,13 +411,15 @@ const [channels, setChannels] = useState<any[]>(() => {
                 onClick={() => setActiveChat(item)}
               >
                 <div className="conv-avatar">
-                  {item.type === 'channel' ? (
-                    <div className="channel-icon-circle"><Hash size={20} /></div>
-                  ) : item.avatar_url ? (
+                  {item.avatar_url ? (
                     <img src={item.avatar_url} className="avatar-img" alt="" />
+                  ) : item.type === 'channel' ? (
+                    <div className="initials-avatar channel-avatar-placeholder">
+                      {(item.username || item.name || "CH").slice(0, 2).toUpperCase()}
+                    </div>
                   ) : (
                     <div className="initials-avatar">
-                      {item.username?.slice(0, 2).toUpperCase() || "UN"}
+                      {(item.username || item.name || "UN").slice(0, 2).toUpperCase()}
                     </div>
                   )}
                 </div>
@@ -429,7 +433,7 @@ const [channels, setChannels] = useState<any[]>(() => {
                       </span>
                     )}
                   </div>
-                  <p className="last-message">{item.last_message}</p>
+                  <p className="last-message">{item.last_message || "No messages yet"}</p>
                 </div>
                 
                 {item.type === 'channel' && <div className="channel-badge">Public</div>}
@@ -474,7 +478,7 @@ const [channels, setChannels] = useState<any[]>(() => {
       {isSearchOpen && (
         <SearchUser 
           onClose={() => setIsSearchOpen(false)} 
-          onStartChat={(user: any) => {
+          onViewProfile={(user: any) => { 
             setActiveChat({
               ...user,
               type: 'direct',

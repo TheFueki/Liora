@@ -4,6 +4,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.2",
-    "lucide-react": "^1.8.0"
+    "dexie": "^4.4.2",
+    "lucide-react": "^1.8.0",
+    "zustand": "^5.0.13"
   }
 }

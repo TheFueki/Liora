@@ -48,6 +48,9 @@ liora/
 ├── backend/
 │   ├── crypto/   # Ed25519/X25519 primitives & AES-GCM logic
 │   ├── db/       # Supabase client & local SQLite persistence
+|   ├── domains/  
+      ├── channels/
+      ├── groups/
 │   ├── network/  # Real-time message listeners & event routing
 │   └── vault/    # Local filesystem key management
 ├── frontend/     # TypeScript source & Dark-mode design system
@@ -63,16 +66,22 @@ Identity: Possession of the liora_identity.key file is the sole method of authen
 Privacy: Zero telemetry. No tracking of OS, usage metrics, or location data.
 
 
-## Quick Start
+# README
 
-**Prerequisites:** [Go](https://go.dev/), [Node.js](https://nodejs.org/), [Wails CLI](https://wails.io/)
+## About
 
-```bash
-# Install dependencies
-npm install --prefix frontend
+This is the official Wails React-TS template.
 
-# Run in development mode
-wails dev
+You can configure the project by editing `wails.json`. More information about the project settings can be found
+here: https://wails.io/docs/reference/project-config
 
-# Build production binary
-wails build
+## Live Development
+
+To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
+server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
+and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
+to this in your browser, and you can call your Go code from devtools.
+
+## Building
+
+To build a redistributable, production mode package, use `wails build`.
