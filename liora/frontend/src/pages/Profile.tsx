@@ -269,7 +269,7 @@ export default function Profile({ myID, onBack }: ProfileProps) {
             <label>Username</label>
             <input 
               type="text" 
-              value={username} 
+              value={`@${username}`} 
               onChange={handleUsernameChange}
               spellCheck={false}
             />

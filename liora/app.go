@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"liora/backend/crypto"
 	"liora/backend/db"
@@ -33,6 +34,12 @@ type GroupInfo struct {
 	Username    string `json:"username"`
 	Description string `json:"description"`
 	AvatarURL   string `json:"avatar_url"`
+}
+
+type EntityInfo struct {
+	PublicID string `json:"public_id"`
+	Username string `json:"username"`
+	Type     string `json:"type"`
 }
 
 type Account struct {
@@ -559,6 +566,9 @@ func (a *App) GetMessages(targetID string, targetPubKey string) ([]Message, erro
 
 	return messages, nil
 }
+func (a *App) DeleteMessageFromServer(msgId string) error {
+	return nil
+}
 
 func (a *App) SendMessage(recipientID string, content string) error {
 	if a.client == nil {
@@ -676,4 +686,53 @@ func (a *App) GetGroupMessages(groupID string) ([]GroupMessage, error) {
 	}
 
 	return messages, nil
+}
+func (a *App) AddByCode(code string) error {
+	cleanCode := strings.TrimSpace(code)
+	if cleanCode == "" {
+		return errors.New("empty invitation token")
+	}
+
+	if len(cleanCode) < 8 {
+		return errors.New("invalid token format: too short")
+	}
+
+	targetEntity, err := a.resolveP2PToken(cleanCode)
+	if err != nil {
+		return fmt.Errorf("resolution failed: %w", err)
+	}
+
+	err = a.establishP2PLink(targetEntity.PublicID)
+	if err != nil {
+		return fmt.Errorf("network handshake failed: %w", err)
+	}
+
+	err = a.saveToLocalAddressBook(targetEntity)
+	if err != nil {
+		return fmt.Errorf("failed to commit entity to database: %w", err)
+	}
+
+	return nil
+}
+
+func (a *App) resolveP2PToken(token string) (*EntityInfo, error) {
+	time.Sleep(600 * time.Millisecond)
+
+	if strings.HasPrefix(token, "err_") {
+		return nil, errors.New("node is unreachable or token expired")
+	}
+
+	return &EntityInfo{
+		PublicID: token,
+		Username: "Resolved_Node_" + token[:4],
+		Type:     "user",
+	}, nil
+}
+
+func (a *App) establishP2PLink(publicID string) error {
+	return nil
+}
+
+func (a *App) saveToLocalAddressBook(entity *EntityInfo) error {
+	return nil
 }

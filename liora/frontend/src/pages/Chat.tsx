@@ -4,7 +4,7 @@ import MessageList from '../components/chat/MessageList';
 import ChatInput from '../components/chat/ChatInput';
 import { Phone, Video, MoreVertical, ShieldCheck, Hash } from 'lucide-react';
 // @ts-ignore
-import { DecryptMessage, SendMessage, GetMessages } from '../../wailsjs/go/main/App'; 
+import { DecryptMessage, SendMessage, GetMessages, DeleteMessageFromServer } from '../../wailsjs/go/main/App'; 
 import { useCacheStore } from '../components/services/cacheManager';
 import '../styles/Chat.scss';
 
@@ -32,6 +32,26 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
       onOpenProfile();
     } else {
       console.log("Channel details:", activeChat);
+    }
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    const currentChatID = chatID.toString();
+    
+    setMessages((prev) => {
+      const updated = prev.filter((msg) => msg.id !== msgId);
+      saveMessages(myID, currentChatID, updated);
+      return updated;
+    });
+
+    try {
+      await supabase.from('messages').delete().eq('id', msgId);
+      
+      if (typeof DeleteMessageFromServer === 'function') {
+        await DeleteMessageFromServer(msgId);
+      }
+    } catch (err) {
+      console.error("Failed to delete message:", err);
     }
   };
 
@@ -67,107 +87,119 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
   }, [chatID, myID, isChannel]);
 
   useEffect(() => {
-  if (!activeChat || !chatID || !myID) {
+    if (!activeChat || !chatID || !myID) {
+      setMessages([]);
+      return;
+    }
+
+    let isMounted = true;
+    const currentChatID = chatID.toString();
+    
     setMessages([]);
-    return;
-  }
 
-  let isMounted = true;
-  const currentChatID = chatID.toString();
-  
-  setMessages([]);
-
-  const loadInitialCache = async () => {
-    try {
-      const cachedMsgs = await getMessages(myID, currentChatID);
-      if (isMounted && cachedMsgs && cachedMsgs.length > 0) {
-        setMessages(cachedMsgs);
-        setTimeout(scrollToBottom, 20);
+    const loadInitialCache = async () => {
+      try {
+        const cachedMsgs = await getMessages(myID, currentChatID);
+        if (isMounted && cachedMsgs && cachedMsgs.length > 0) {
+          setMessages(cachedMsgs);
+          setTimeout(scrollToBottom, 20);
+        }
+      } catch (err) {
+        console.error("Failed to fetch cached messages:", err);
       }
-    } catch (err) {
-      console.error("Failed to fetch cached messages:", err);
-    }
-  };
+    };
 
-  const syncWithNetwork = async () => {
-    try {
-      const pubKey = isChannel ? "" : currentChatID; 
-      const networkData = await GetMessages(currentChatID, pubKey);
-      
-      if (isMounted && networkData) {
-        setMessages(networkData);
-        await saveMessages(myID, currentChatID, networkData);
-        setTimeout(scrollToBottom, 50);
+    const syncWithNetwork = async () => {
+      try {
+        const pubKey = isChannel ? "" : currentChatID; 
+        const networkData = await GetMessages(currentChatID, pubKey);
+        
+        if (isMounted && networkData) {
+          setMessages(networkData);
+          await saveMessages(myID, currentChatID, networkData);
+          setTimeout(scrollToBottom, 50);
+        }
+      } catch (err) {
+        console.error("Failed to fetch network messages:", err);
       }
-    } catch (err) {
-      console.error("Failed to fetch network messages:", err);
-    }
-  };
+    };
 
-  loadInitialCache().then(() => {
-    if (isMounted) syncWithNetwork();
-  });
+    loadInitialCache().then(() => {
+      if (isMounted) syncWithNetwork();
+    });
 
-  const channel = supabase
-    .channel(`chat_realtime:${currentChatID}_${myID}`)
-    .on('postgres_changes', 
-      { event: 'INSERT', schema: 'public', table: 'messages' }, 
-      async (payload) => {
-        const newMsg = payload.new;
-        
-        if (!isMounted) return;
-        
-        const isRelevant = isChannel 
-          ? newMsg.channel_id?.toString() === currentChatID 
-          : ((newMsg.sender_id?.toString() === currentChatID && newMsg.recipient_id === myID) || 
-             (newMsg.sender_id?.toString() === myID && newMsg.recipient_id === currentChatID));
+    const channel = supabase
+      .channel(`chat_realtime:${currentChatID}_${myID}`)
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'messages' }, 
+        async (payload) => {
+          if (!isMounted) return;
 
-        if (isRelevant) {
-          let processedMsg = { ...newMsg };
-
-          if (!isChannel) {
-            try {
-              const decryptionKey = newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id;
-
-              const clearText = await DecryptMessage(decryptionKey.toString(), newMsg.content.toString());
-              if (clearText) {
-                processedMsg.content = clearText;
-              }
-            } catch (e) {
-              console.error("Crypto layer decryption failure:", e);
-              processedMsg.content = "🔒 [Decryption Error]";
-            }
-          }
-          
-          if (isMounted) {
+          if (payload.eventType === 'DELETE') {
+            const deletedId = payload.old.id;
             setMessages((prev) => {
-              const existingIdx = prev.findIndex(m => m.isOptimistic && m.content === processedMsg.content);
-              
-              if (existingIdx !== -1) {
-                const updated = [...prev];
-                updated[existingIdx] = { ...processedMsg, isOptimistic: false };
-                saveMessages(myID, currentChatID, updated);
-                return updated;
-              }
-
-              if (prev.some(m => m.id === processedMsg.id)) return prev;
-              
-              const updated = [...prev, processedMsg];
+              const updated = prev.filter(m => m.id !== deletedId);
               saveMessages(myID, currentChatID, updated);
               return updated;
             });
-            setTimeout(scrollToBottom, 50);
+            return;
+          }
+
+          if (payload.eventType === 'INSERT') {
+            const newMsg = payload.new;
+            
+            const isRelevant = isChannel 
+              ? newMsg.channel_id?.toString() === currentChatID 
+              : ((newMsg.sender_id?.toString() === currentChatID && newMsg.recipient_id === myID) || 
+                 (newMsg.sender_id?.toString() === myID && newMsg.recipient_id === currentChatID));
+
+            if (isRelevant) {
+              let processedMsg = { ...newMsg };
+
+              if (!isChannel) {
+                try {
+                  const decryptionKey = newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id;
+
+                  const clearText = await DecryptMessage(decryptionKey.toString(), newMsg.content.toString());
+                  if (clearText) {
+                    processedMsg.content = clearText;
+                  }
+                } catch (e) {
+                  console.error("Crypto layer decryption failure:", e);
+                  processedMsg.content = "🔒 [Decryption Error]";
+                }
+              }
+              
+              if (isMounted) {
+                setMessages((prev) => {
+                  const existingIdx = prev.findIndex(m => m.isOptimistic && m.content === processedMsg.content);
+                  
+                  if (existingIdx !== -1) {
+                    const updated = [...prev];
+                    updated[existingIdx] = { ...processedMsg, isOptimistic: false };
+                    saveMessages(myID, currentChatID, updated);
+                    return updated;
+                  }
+
+                  if (prev.some(m => m.id === processedMsg.id)) return prev;
+                  
+                  const updated = [...prev, processedMsg];
+                  saveMessages(myID, currentChatID, updated);
+                  return updated;
+                });
+                setTimeout(scrollToBottom, 50);
+              }
+            }
           }
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
 
-  return () => {
-    isMounted = false;
-    supabase.removeChannel(channel);
-  };
-}, [activeChat, myID, chatID, isChannel]);
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [activeChat, myID, chatID, isChannel]);
 
   const handleSend = async (content: string) => {
     if (!chatID || !myID) return;
@@ -178,7 +210,7 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
       sender_id: myID,
       recipient_id: currentChatID,
       channel_id: isChannel ? currentChatID : null, 
-      content: content,                     
+      content: content,                      
       is_read: false,
       created_at: new Date().toISOString(),
       isOptimistic: true                     
@@ -266,7 +298,7 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
       </header>
 
       <div className="messages-scroll-area">
-        <MessageList messages={messages} myID={myID} />
+        <MessageList messages={messages} myID={myID} onDeleteMessage={handleDeleteMessage} />
         <div ref={messagesEndRef} />
       </div>
       

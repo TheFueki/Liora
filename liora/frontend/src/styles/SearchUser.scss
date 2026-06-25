@@ -75,6 +75,13 @@ $glass-border: rgba(255, 255, 255, 0.06);
         border-color: rgba($accent-purple, 0.4);
         box-shadow: 0 0 15px rgba($accent-purple, 0.1);
       }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        background: rgba(0, 0, 0, 0.2);
+        border-color: transparent;
+      }
     }
   }
 
@@ -98,7 +105,6 @@ $glass-border: rgba(255, 255, 255, 0.06);
   }
 }
 
-/* СТИЛИ ВКЛАДОК (TABS) */
 .search-tabs {
   display: flex;
   padding: 4px 24px 0 24px;
@@ -257,6 +263,136 @@ $glass-border: rgba(255, 255, 255, 0.06);
     .inline-mini-profile-wrapper {
       padding: 0 14px 14px 14px;
       animation: slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  }
+
+  .direct-code-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 16px;
+    text-align: center;
+    height: 80%;
+    box-sizing: border-box;
+    animation: scaleUp 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+
+    .panel-icon-info {
+      margin-bottom: 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+
+      .key-icon {
+        color: rgba(#fff, 0.2);
+        margin-bottom: 16px;
+        filter: drop-shadow(0 0 15px rgba($accent-purple, 0.15));
+      }
+
+      h3 {
+        margin: 0;
+        font-size: 16px;
+        color: $text-main;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      p {
+        margin: 8px 0 0 0;
+        font-size: 13px;
+        color: $text-dim;
+        max-width: 340px;
+        line-height: 1.4;
+      }
+    }
+
+    .code-input-form {
+      width: 100%;
+      max-width: 380px;
+
+      .code-field-wrapper {
+        display: flex;
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid $glass-border;
+        border-radius: 14px;
+        padding: 5px;
+        transition: all 0.25s ease;
+
+        &:focus-within {
+          border-color: rgba($accent-purple, 0.5);
+          box-shadow: 0 0 20px rgba($accent-purple, 0.12);
+        }
+
+        input {
+          flex: 1;
+          background: transparent;
+          border: none;
+          outline: none;
+          padding: 10px 14px;
+          color: #fff;
+          font-size: 14px;
+          font-family: 'JetBrains Mono', monospace;
+
+          &::placeholder {
+            color: rgba(255, 255, 255, 0.15);
+          }
+        }
+
+        .submit-code-btn {
+          background: rgba($accent-purple, 0.1);
+          border: 1px solid rgba($accent-purple, 0.2);
+          color: #fff;
+          border-radius: 10px;
+          padding: 0 18px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          transition: all 0.2s ease;
+
+          &:hover:not(:disabled) {
+            background: $accent-purple;
+            box-shadow: 0 0 15px rgba($accent-purple, 0.4);
+          }
+
+          &:active:not(:disabled) {
+            transform: scale(0.97);
+          }
+
+          &:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            background: rgba(255, 255, 255, 0.02);
+            border-color: transparent;
+            color: $text-dim;
+          }
+        }
+      }
+    }
+
+    .code-status-message {
+      margin-top: 20px;
+      font-size: 13px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      max-width: 380px;
+      line-height: 1.4;
+      animation: slideDown 0.2s ease;
+
+      &.success {
+        background: rgba($neon-accent, 0.04);
+        border: 1px solid rgba($neon-accent, 0.15);
+        color: $neon-accent;
+        text-shadow: 0 0 8px rgba($neon-accent, 0.2);
+      }
+
+      &.error {
+        background: rgba(#ff453a, 0.04);
+        border: 1px solid rgba(#ff453a, 0.15);
+        color: #ff453a;
+      }
     }
   }
 }

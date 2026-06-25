@@ -1,14 +1,37 @@
 import React from 'react';
-import { Check, CheckCheck, Copy, Trash2, Reply, Share2, FileText, Download, Clock } from 'lucide-react';
-import { useMessageActions } from '../../hooks/useMessageActions'; 
+import { Check, CheckCheck, Copy, Trash2, Reply, Share2, FileText, Download, Clock, X } from 'lucide-react';
+import { useMessageActions } from '../../hooks/useMessageActions';
 
 interface MessageListProps {
   messages: any[];
   myID: string;
+  onDeleteMessage: (msgId: string) => void;
 }
 
-export default function MessageList({ messages, myID }: MessageListProps) {
-  const { contextMenu, handleContextMenu, copyMessage, deleteMessage } = useMessageActions();
+export default function MessageList({ messages, myID, onDeleteMessage }: MessageListProps) {
+  const { 
+    contextMenu, 
+    handleContextMenu, 
+    copyMessage, 
+    deleteSingleMessage,
+    startSelection,
+    enterSelection,
+    selectedMessages,
+    clearSelection,
+    copySelectedText,
+    deleteSelectedMessages
+  } = useMessageActions({
+    onDeleteMessage
+  });
+
+  const isSelectionMode = selectedMessages.length > 0;
+
+  const handleDeleteClick = () => {
+    const confirmDelete = window.confirm(`Удалить выбранные сообщения (${selectedMessages.length} шт.) для всех?`);
+    if (confirmDelete) {
+      deleteSelectedMessages();
+    }
+  };
 
   const formatDateSeparator = (dateString: string) => {
     if (!dateString) return "Today";
@@ -33,7 +56,7 @@ export default function MessageList({ messages, myID }: MessageListProps) {
             alt="Uploaded media" 
             className="message-attached-img" 
             loading="lazy"
-            onClick={() => window.open(imageUrl, '_blank')}
+            onClick={(e) => { e.stopPropagation(); window.open(imageUrl, '_blank'); }}
           />
           {caption.trim() && <p className="media-caption">{caption}</p>}
         </div>
@@ -51,7 +74,7 @@ export default function MessageList({ messages, myID }: MessageListProps) {
             <FileText size={24} className="text-blue" />
             <span className="file-name-text" title={filename}>{filename}</span>
           </div>
-          <button className="file-download-btn" onClick={() => window.open(fileUrl, '_blank')}>
+          <button className="file-download-btn" onClick={(e) => { e.stopPropagation(); window.open(fileUrl, '_blank'); }}>
             <Download size={16} />
           </button>
         </div>
@@ -63,12 +86,35 @@ export default function MessageList({ messages, myID }: MessageListProps) {
 
   return (
     <div className="messages-container">
+      {isSelectionMode && (
+        <div className="selection-panel-top glass-morphism">
+          <div className="selection-info">
+            <button className="close-selection-btn" onClick={clearSelection}>
+              <X size={20} />
+            </button>
+            <span className="selection-count">Выделено сообщений: {selectedMessages.length}</span>
+          </div>
+          <div className="selection-actions">
+            <button onClick={copySelectedText} title="Копировать текст">
+              <Copy size={18} />
+            </button>
+            <button onClick={() => console.log('Forward multi:', selectedMessages)} title="Переслать">
+              <Share2 size={18} />
+            </button>
+            <button onClick={handleDeleteClick} className="delete-btn" title="Удалить выбранные">
+              <Trash2 size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {messages.map((msg, index) => {
         if (!msg) return null;
 
         const isMine = msg.sender_id === myID;
         const isMenuOpen = contextMenu?.msg?.id === msg.id;
         const isPending = !!msg.isOptimistic;
+        const isSelected = selectedMessages.some(m => m.id === msg.id);
         
         const isFromChannel = msg.channel_id !== null && msg.channel_id !== undefined && msg.channel_id !== "";
 
@@ -89,8 +135,10 @@ export default function MessageList({ messages, myID }: MessageListProps) {
             )}
 
             <div 
-              className={`message-wrapper ${isMine ? 'mine' : 'theirs'} ${isMenuOpen ? 'selected' : ''}`}
+              className={`message-wrapper ${isMine ? 'mine' : 'theirs'} ${isMenuOpen ? 'selected' : ''} ${isSelected ? 'drag-selected' : ''}`}
               onContextMenu={(e) => handleContextMenu(e, msg)}
+              onMouseDown={(e) => startSelection(e, msg)}
+              onMouseEnter={() => enterSelection(msg)}
             >
               <div className={`message-bubble ${isMine ? 'glass-morphism-blue' : 'glass-morphism'} ${isPending ? 'pending' : ''}`}>
                 
@@ -147,10 +195,10 @@ export default function MessageList({ messages, myID }: MessageListProps) {
               <Share2 size={16} /> Forward
             </button>
 
-            {contextMenu.msg?.sender_id === myID && (
+            {contextMenu.msg?.sender_id === myID && !contextMenu.msg?.isOptimistic && (
               <button 
                 className="delete-item" 
-                onClick={() => deleteMessage(contextMenu.msg?.id)}
+                onClick={() => deleteSingleMessage(contextMenu.msg?.id)}
               >
                 <Trash2 size={16} /> Delete
               </button>

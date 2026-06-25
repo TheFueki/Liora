@@ -7,7 +7,7 @@ import {
 import { SendGroupMessage, GetGroupMessages } from '../../../wailsjs/go/main/App';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
-import "../styles/Groups.scss";
+import "@styles/Groups.scss";
 
 interface GroupData {
     id: string | number;
@@ -143,6 +143,19 @@ export const GroupChat: React.FC<GroupChatProps> = ({ group: initialGroup, myID,
         }
     };
 
+    const handleDeleteMessage = async (msgId: string) => {
+        setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
+
+        try {
+            await supabase
+                .from('group_messages')
+                .delete()
+                .eq('id', msgId);
+        } catch (err) {
+            console.error("Failed to delete group message:", err);
+        }
+    };
+
     useEffect(() => {
         loadMessages();
         fetchMemberCount();
@@ -151,18 +164,26 @@ export const GroupChat: React.FC<GroupChatProps> = ({ group: initialGroup, myID,
             .channel(`group_realtime:${targetGroupId}`)
             .on('postgres_changes', 
                 { 
-                    event: 'INSERT', 
+                    event: '*', 
                     schema: 'public', 
                     table: 'group_messages',
                     filter: `group_id=eq.${targetGroupId}` 
                 }, 
                 (payload) => {
-                    const newMsg = payload.new;
-                    setMessages((prev) => {
-                        if (prev.some(m => m.id === newMsg.id)) return prev;
-                        return [...prev, newMsg];
-                    });
-                    setTimeout(() => scrollToBottom(), 50);
+                    if (payload.eventType === 'DELETE') {
+                        const deletedId = payload.old.id;
+                        setMessages((prev) => prev.filter(m => m.id !== deletedId));
+                        return;
+                    }
+
+                    if (payload.eventType === 'INSERT') {
+                        const newMsg = payload.new;
+                        setMessages((prev) => {
+                            if (prev.some(m => m.id === newMsg.id)) return prev;
+                            return [...prev, newMsg];
+                        });
+                        setTimeout(() => scrollToBottom(), 50);
+                    }
                 }
             )
             .subscribe();
@@ -228,7 +249,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ group: initialGroup, myID,
                 </header>
 
                 <div className="messages-scroll-area">
-                    <MessageList messages={messages} myID={myID} />
+                    <MessageList messages={messages} myID={myID} onDeleteMessage={handleDeleteMessage} />
                     <div ref={messagesEndRef} />
                 </div>
 

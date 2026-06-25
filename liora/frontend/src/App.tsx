@@ -57,7 +57,24 @@ function App() {
     refreshProfile().then(() => setScreen('dashboard'));
   };
 
-  if (loading) return <div className="loading">Initializing Liora...</div>;
+  if (loading) {
+  return (
+    <div className="liora-splash-screen">
+      <div className="splash-backdrop" />
+      <div className="splash-content">
+        <div className="splash-logo-container">
+          <div className="splash-glow" />
+          <div className="splash-icon">Ω</div>
+        </div>
+        <h1 className="splash-title">Liora Messenger</h1>
+        <p className="splash-subtitle">Initializing...</p>
+        <div className="splash-loader-bar">
+          <div className="splash-loader-progress" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
   return (
     <div className="liora-app-container">

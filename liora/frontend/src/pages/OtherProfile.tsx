@@ -73,12 +73,12 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
         <div className="profile-body">
           <div className="protocol-info">
             <Info size={16} />
-            <span>Secure Node: P2P Ed25519 Handshake active</span>
+            <span>Node: Handshake is active</span>
           </div>
           
           <div className="bio-section">
             <label>Bio</label>
-            <p>{user.bio || "No encrypted bio found for this identity node."}</p>
+            <p>{user.bio || "No bio found."}</p>
           </div>
         </div>
 
