@@ -1,0 +1,390 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../../lib/supabaseClient';
+import { 
+    Phone, Video, ChevronLeft, Users, 
+    Info, Settings, Trash2, Calendar, Copy, Check, Edit2, Save, X as CloseIcon
+} from 'lucide-react';
+import { SendGroupMessage, GetGroupMessages } from '../../../wailsjs/go/main/App';
+import MessageList from './MessageList';
+import ChatInput from './ChatInput';
+import "../styles/Groups.scss";
+
+interface GroupData {
+    id: string | number;
+    name: string;
+    username?: string;
+    avatar_url?: string;
+    description: string;
+    creator_id: string;
+    created_at: string;
+}
+
+interface GroupChatProps {
+    group: GroupData | null; 
+    myID: string;
+    onBack: () => void;
+}
+
+export const GroupChat: React.FC<GroupChatProps> = ({ group: initialGroup, myID, onBack }) => {
+    if (!initialGroup || !initialGroup.creator_id) {
+        return (
+            <div className="channel-loading">
+                <button onClick={onBack}>Back</button>
+                <p>Loading group data...</p>
+            </div>
+        );
+    }
+
+    const [currentGroup, setCurrentGroup] = useState<GroupData>(initialGroup);
+    const isOwner = myID === currentGroup.creator_id;
+    
+    const [messages, setMessages] = useState<any[]>([]);
+    const [showInfoModal, setShowInfoModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
+    const [copiedField, setCopiedField] = useState<string | null>(null);
+    const [memberCount, setMemberCount] = useState(1); 
+
+    const [avatarUrlInput, setAvatarUrlInput] = useState(currentGroup.avatar_url || '');
+    const [descriptionInput, setDescriptionInput] = useState(currentGroup.description || '');
+    const [isEditingSettings, setIsEditingSettings] = useState(false);
+
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const targetGroupId = currentGroup.id.toString();
+
+    const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+        messagesEndRef.current?.scrollIntoView({ behavior });
+    };
+
+    useEffect(() => {
+        if (initialGroup) {
+            setCurrentGroup(initialGroup);
+            setAvatarUrlInput(initialGroup.avatar_url || '');
+            setDescriptionInput(initialGroup.description || '');
+        }
+    }, [initialGroup]);
+
+    const loadMessages = async () => {
+        try {
+            const history = await GetGroupMessages(targetGroupId);
+            setMessages(history || []);
+            setTimeout(() => scrollToBottom("auto"), 50);
+        } catch (err) {
+            console.error("Failed to load group history:", err);
+        }
+    };
+
+    const fetchMemberCount = async () => {
+        try {
+            const { count, error } = await supabase
+                .from('group_members') 
+                .select('*', { count: 'exact', head: true })
+                .eq('group_id', targetGroupId);
+            
+            if (!error && count !== null) {
+                setMemberCount(count);
+            }
+        } catch (e) {
+            setMemberCount(1); 
+        }
+    };
+
+    const copyToClipboard = (text: string, field: string) => {
+        navigator.clipboard.writeText(text);
+        setCopiedField(field);
+        setTimeout(() => setCopiedField(null), 2000);
+    };
+
+    const handleUpdateGroupSettings = async () => {
+        setIsSavingSettings(true);
+        try {
+            const { error } = await supabase
+                .from('groups')
+                .update({
+                    avatar_url: avatarUrlInput.trim() || null,
+                    description: descriptionInput.trim()
+                })
+                .eq('id', targetGroupId);
+
+            if (error) throw error;
+
+            setCurrentGroup(prev => ({
+                ...prev,
+                avatar_url: avatarUrlInput.trim() || undefined,
+                description: descriptionInput.trim()
+            }));
+            setIsEditingSettings(false);
+        } catch (err) {
+            console.error("Update group profile error:", err);
+            alert("Failed to update group parameters");
+        } finally {
+            setIsSavingSettings(false);
+        }
+    };
+
+    const handleDeleteGroup = async () => {
+        if (!window.confirm("Are you sure you want to delete this group? All history will be permanently wiped.")) return;
+        
+        setIsDeleting(true);
+        try {
+            const { error } = await supabase
+                .from('groups')
+                .delete()
+                .eq('id', targetGroupId);
+
+            if (error) throw error;
+            setShowInfoModal(false);
+            onBack(); 
+        } catch (err) {
+            console.error("Delete error:", err);
+            alert("Failed to delete group");
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    useEffect(() => {
+        loadMessages();
+        fetchMemberCount();
+
+        const groupSubscription = supabase
+            .channel(`group_realtime:${targetGroupId}`)
+            .on('postgres_changes', 
+                { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'group_messages',
+                    filter: `group_id=eq.${targetGroupId}` 
+                }, 
+                (payload) => {
+                    const newMsg = payload.new;
+                    setMessages((prev) => {
+                        if (prev.some(m => m.id === newMsg.id)) return prev;
+                        return [...prev, newMsg];
+                    });
+                    setTimeout(() => scrollToBottom(), 50);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(groupSubscription);
+        };
+    }, [targetGroupId]);
+
+    const handleSend = async (content: string) => {
+        if (!content.trim()) return;
+        try {
+            await SendGroupMessage(targetGroupId, content.trim()); 
+        } catch (err) {
+            console.error("Send group message error:", err);
+        }
+    };
+
+    return (
+        <div className="channel-container">
+            <div className="channel-view animate-fade">
+                <header className="channel-header">
+                    <div className="header-info" onClick={() => setShowInfoModal(true)}>
+                        <button className="back-btn" onClick={(e) => { e.stopPropagation(); onBack(); }}>
+                            <ChevronLeft size={24} />
+                        </button>
+                        
+                        <div className="channel-avatar-wrapper">
+                            {currentGroup.avatar_url ? (
+                                <img src={currentGroup.avatar_url} alt={currentGroup.name} className="channel-image" />
+                            ) : (
+                                <div className="channel-icon-fallback">
+                                    <Users size={20} />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="user-details">
+                            <div className="name-row">
+                                <h3>{currentGroup.name}</h3>
+                                {isOwner && <Settings size={14} className="owner-badge-icon" title="You are owner" />}
+                            </div>
+                            <div className="status-container">
+                                <Users size={12} className="text-blue" />
+                                <span className="status-text">
+                                    {currentGroup.username ? `@${currentGroup.username}` : "no username"} • {memberCount} members
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="header-actions">
+                        <button className="action-btn"><Phone size={20} /></button>
+                        <button className="action-btn"><Video size={20} /></button>
+                        <div className="divider-v"></div>
+                        <button 
+                            className={`action-btn ${showInfoModal ? 'active' : ''}`} 
+                            onClick={() => setShowInfoModal(true)}
+                        >
+                            <Info size={20} />
+                        </button>
+                    </div>
+                </header>
+
+                <div className="messages-scroll-area">
+                    <MessageList messages={messages} myID={myID} />
+                    <div ref={messagesEndRef} />
+                </div>
+
+                <ChatInput 
+                    onSend={handleSend} 
+                    recipientPubKey={targetGroupId} 
+                    isChannel={false} 
+                />
+            </div>
+
+            {showInfoModal && (
+                <div className="channel-modal-overlay animate-fade" onClick={() => setShowInfoModal(false)}>
+                    <div className="channel-modal-box animate-scale-up" onClick={(e) => e.stopPropagation()}>
+                        
+                        <div className="modal-header">
+                            <div className="modal-title-group">
+                                <div className="modal-avatar-wrapper">
+                                    {currentGroup.avatar_url ? (
+                                        <img src={currentGroup.avatar_url} alt={currentGroup.name} className="modal-channel-image" />
+                                    ) : (
+                                        <div className="modal-avatar-hash">
+                                            <Users size={24} />
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <h2>{currentGroup.name}</h2>
+                                    <p>{currentGroup.username ? `@${currentGroup.username}` : "no username"}</p>
+                                </div>
+                            </div>
+                            <button className="close-modal-btn" onClick={() => setShowInfoModal(false)}>×</button>
+                        </div>
+
+                        <div className="modal-body">
+                            <div className="info-grid-stats">
+                                <div className="grid-stat-card">
+                                    <Users size={20} />
+                                    <div className="stat-value">{memberCount}</div>
+                                    <div className="stat-label">Members</div>
+                                </div>
+                                <div className="grid-stat-card">
+                                    <Calendar size={20} />
+                                    <div className="stat-value">
+                                        {new Date(currentGroup.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                                    </div>
+                                    <div className="stat-label">Created</div>
+                                </div>
+                            </div>
+
+                            <div className="info-details-sections">
+                                {isOwner && (
+                                    <div className="settings-toggle-zone">
+                                        <button 
+                                            className={`settings-edit-btn ${isEditingSettings ? 'active' : ''}`}
+                                            onClick={() => setIsEditingSettings(!isEditingSettings)}
+                                        >
+                                            {isEditingSettings ? <CloseIcon size={14} /> : <Edit2 size={14} />}
+                                            <span>{isEditingSettings ? "Cancel Editing" : "Edit Profile"}</span>
+                                        </button>
+                                    </div>
+                                )}
+
+                                {isEditingSettings ? (
+                                    <div className="meta-item-box settings-edit-form">
+                                        <div className="form-group">
+                                            <label>Group Avatar URL</label>
+                                            <input 
+                                                type="text" 
+                                                value={avatarUrlInput} 
+                                                onChange={(e) => setAvatarUrlInput(e.target.value)}
+                                                placeholder="https://example.com/avatar.png"
+                                                className="settings-input"
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Description</label>
+                                            <textarea 
+                                                value={descriptionInput} 
+                                                onChange={(e) => setDescriptionInput(e.target.value)}
+                                                placeholder="Write short group description..."
+                                                className="settings-textarea"
+                                                rows={3}
+                                            />
+                                        </div>
+                                        <button 
+                                            className="settings-save-btn" 
+                                            onClick={handleUpdateGroupSettings}
+                                            disabled={isSavingSettings}
+                                        >
+                                            <Save size={14} />
+                                            <span>{isSavingSettings ? "Saving..." : "Save parameters"}</span>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="meta-item-box">
+                                        <div className="meta-row-content">
+                                            <label>Description</label>
+                                            <p className="description-text">{currentGroup.description || "No description provided."}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {currentGroup.username && (
+                                    <div className="meta-item-box clickable-row" onClick={() => copyToClipboard(`@${currentGroup.username}`, 'username')}>
+                                        <div className="meta-row-content">
+                                            <label>Group Username</label>
+                                            <span className="channel-username-tag">@{currentGroup.username}</span>
+                                        </div>
+                                        <button className="copy-field-btn">
+                                            {copiedField === 'username' ? <Check size={16} className="green-icon" /> : <Copy size={16} />}
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="meta-item-box clickable-row" onClick={() => copyToClipboard(targetGroupId, 'id')}>
+                                    <div className="meta-row-content">
+                                        <label>Group Unique ID</label>
+                                        <code className="secure-code-text">{currentGroup.id}</code>
+                                    </div>
+                                    <button className="copy-field-btn">
+                                        {copiedField === 'id' ? <Check size={16} className="green-icon" /> : <Copy size={16} />}
+                                    </button>
+                                </div>
+
+                                <div className="meta-item-box">
+                                    <div className="security-status-bar">
+                                        <Users size={18} className="crypto-icon text-blue" />
+                                        <div className="crypto-info-text">
+                                            <h4>Public Group Chat</h4>
+                                            <p>This group chat is public. Messages are unencrypted and visible to all members.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {isOwner && (
+                                <div className="modal-admin-zone">
+                                    <h4>Owner permissions control</h4>
+                                    <div className="admin-actions-list">
+                                        <button 
+                                            className="dangerous-action-btn"
+                                            onClick={handleDeleteGroup}
+                                            disabled={isDeleting}
+                                        >
+                                            <Trash2 size={16} />
+                                            {isDeleting ? "Deleting..." : "Delete Group"}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default GroupChat;

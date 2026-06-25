@@ -28,6 +28,12 @@ type ChatMessage struct {
 	IsMine    bool   `json:"is_mine"`
 	Timestamp string `json:"timestamp"`
 }
+type GroupInfo struct {
+	Name        string `json:"name"`
+	Username    string `json:"username"`
+	Description string `json:"description"`
+	AvatarURL   string `json:"avatar_url"`
+}
 
 type Account struct {
 	ID        string `json:"id"`
@@ -43,6 +49,14 @@ type Message struct {
 	Content     string  `json:"content"`
 	IsRead      bool    `json:"is_read"`
 	CreatedAt   string  `json:"created_at"`
+}
+
+type GroupMessage struct {
+	ID        string `json:"id,omitempty"`
+	GroupID   string `json:"group_id"`
+	SenderID  string `json:"sender_id"`
+	Content   string `json:"content"`
+	CreatedAt string `json:"created_at,omitempty"`
 }
 
 type App struct {
@@ -218,7 +232,7 @@ func (a *App) DecryptMessage(senderPubKeyHex string, ciphertextHex string) (stri
 		fmt.Printf("[DEBUG-CRYPTO] Ошибка GenerateSharedSecret (Diffie-Hellman паника): %v\n", err)
 		return "[Crypto Error]", nil
 	}
-	fmt.Printf("[DEBUG-CRYPTO] Shared Secret успешно вычислен (Hex): %s\n", hex.EncodeToString(shared[:4])) // логируем первые 4 байта для безопасности
+	fmt.Printf("[DEBUG-CRYPTO] Shared Secret успешно вычислен (Hex): %s\n", hex.EncodeToString(shared[:4]))
 
 	plaintext, err := crypto.DecryptWithSharedKey(ciphertext, shared)
 	if err != nil {
@@ -393,6 +407,7 @@ func (a *App) SearchUsers(query string) ([]map[string]interface{}, error) {
 
 	return results, err
 }
+
 func (a *App) uploadFileToStorage(filePath string) (string, error) {
 	fileData, err := os.ReadFile(filePath)
 	if err != nil {
@@ -451,6 +466,34 @@ func (a *App) CreateNewChannel(info ChannelInfo) (map[string]interface{}, error)
 	row["owner_id"] = a.myID
 	return row, nil
 }
+func (a *App) CreateNewGroup(info GroupInfo) (map[string]interface{}, error) {
+	if a.client == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	row := map[string]interface{}{
+		"name":        info.Name,
+		"username":    info.Username,
+		"description": info.Description,
+		"creator_id":  a.myID,
+		"created_at":  time.Now(),
+		"avatar_url":  info.AvatarURL,
+	}
+
+	var results []map[string]interface{}
+	_, err := a.client.From("groups").Insert(row, false, "", "", "").ExecuteTo(&results)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		return results[0], nil
+	}
+
+	return row, nil
+}
+
 func (a *App) checkIfChannel(id string) bool {
 	var result []map[string]interface{}
 	_, err := a.client.From("channels").
@@ -599,4 +642,38 @@ func (a *App) GetChatHistory(otherID string) ([]Message, error) {
 
 func (a *App) GetLocalHistory(otherID string) ([]db.LocalMessage, error) {
 	return db.GetChatHistory(otherID)
+}
+
+func (a *App) SendGroupMessage(groupID string, content string) error {
+	if a.client == nil {
+		return fmt.Errorf("database not connected")
+	}
+
+	payload := map[string]interface{}{
+		"group_id":  groupID,
+		"sender_id": a.myID,
+		"content":   content,
+	}
+
+	_, _, err := a.client.From("group_messages").Insert(payload, false, "", "", "").Execute()
+	return err
+}
+
+func (a *App) GetGroupMessages(groupID string) ([]GroupMessage, error) {
+	if a.client == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	var messages []GroupMessage
+	_, err := a.client.From("group_messages").
+		Select("*", "exact", false).
+		Eq("group_id", groupID).
+		Order("created_at", &postgrest.OrderOpts{Ascending: true}).
+		ExecuteTo(&messages)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return messages, nil
 }

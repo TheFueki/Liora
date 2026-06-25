@@ -1,28 +1,29 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  Search, Plus, Shield, 
-  MessageSquarePlus, Users, Radio, UserPlus,
-  User, LogOut, Settings as SettingsIcon, Key, ShieldCheck, X, Disc,
+  Search, Plus, 
+  MessageSquarePlus, Users,
+  User, LogOut, Settings as SettingsIcon, ShieldCheck, X,
   Megaphone,
-  Bookmark,
-  Music,
-  Hash,
-  Globe,
-  HardDrive,
   Compass,
-  Rss
+  HardDrive,
+  Rss,
+  Bell,
+  Folder,
+  Globe,
+  Music
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 // @ts-ignore
-import { SearchUsers, GetAvailableAccounts, SwitchToAccount, DecryptMessage } from '../../wailsjs/go/main/App';
-import Contacts from './Contacts';
-import DiscordIcon from './DiscordIcon';
+import { GetAvailableAccounts, SwitchToAccount, DecryptMessage } from '../../wailsjs/go/main/App';
+import DiscordIcon from '../items/Icons/DiscordIcon';
 import Chat from './Chat';
 import OtherProfile from './OtherProfile';
 import SearchUser from './SearchUser';
 import Settings from './Settings'; 
 import CreateChannel from './CreateChannel';
 import Channel from './Channel';
+import CreateGroup from './CreateGroup';
+import Group from './Groups';
 import { useCacheStore } from '../components/services/cacheManager';
 import '../styles/Dashboard.scss';
 import userPhoto from '../assets/liora1.png';
@@ -53,7 +54,7 @@ function AccountSwitcher({ onSelect, onAddNew }: { onSelect: (id: string) => voi
     <div className="account-switcher glass-morphism animate-pop">
       <div className="switcher-header">
         <ShieldCheck size={20} className="text-green" />
-        <h3>Active Identities</h3>
+        <h3>Active accounts</h3>
       </div>
       <div className="accounts-list">
         {accounts.map(acc => {
@@ -85,7 +86,7 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
   const [activeTab, setActiveTab] = useState('messages'); 
   const [messageFilter, setMessageFilter] = useState<'direct' | 'groups' | 'channels'>('direct');
   
-  const { conversations, channels, isLoaded, loadFromStorage, setCache, updateLastMessage } = useCacheStore();
+  const { conversations, channels, isLoaded, loadFromStorage, setCache } = useCacheStore();
   
   const [avatar, setAvatar] = useState<string | undefined>(undefined);
   const [viewingUser, setViewingUser] = useState<any | null>(null);
@@ -96,9 +97,13 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false); 
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [myGroups, setMyGroups] = useState<any[]>([]);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const sideNavRef = useRef<HTMLElement>(null);
 
   const fetchCounterRef = useRef(0);
 
@@ -112,10 +117,13 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
   }, [profile, myID]);
 
   useEffect(() => {
-    loadFromStorage(myID);
+    if (myID) {
+      loadFromStorage(myID);
+    }
   }, [myID, loadFromStorage]);
 
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
+    if (!myID) return;
     console.log("Fetching all dashboard data...");
     const currentFetchId = ++fetchCounterRef.current;
 
@@ -129,9 +137,36 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
         ...c,
         type: 'channel',
         displayID: `channel_${c.id}`, 
-        username: c.name,
-        last_message: "Public Channel Content"
+        username: c.username || c.name,
+        owner_id: c.owner_id,
+        last_message: c.last_message || "Public Channel Content"
       }));
+    }
+
+    const { data: groupMemberships, error: groupError } = await supabase
+      .from('group_members')
+      .select('group_id, groups(*)')
+      .eq('user_id', myID);
+
+    let loadedGroups: any[] = [];
+    if (!groupError && groupMemberships) {
+      loadedGroups = groupMemberships
+        .filter(m => m.groups !== null)
+        .map(m => {
+          const g = Array.isArray(m.groups) ? m.groups[0] : m.groups;
+          if (!g) return null;
+          
+          return {
+            ...g,
+            type: 'group',
+            displayID: `group_${g.id}`,
+            username: g.username || g.name,
+            last_message: "Group Chat"
+          };
+        })
+        .filter(Boolean); 
+        
+      setMyGroups(loadedGroups);
     }
 
     const { data: messages, error: msgError } = await supabase
@@ -202,46 +237,71 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
         setCache(myID, { conversations: sorted, channels: loadedChannels });
       }
     }
-  };
+  }, [myID, setCache]);
 
   useEffect(() => {
+    if (!myID) return;
     fetchAllData();
 
     const channelSubscription = supabase.channel(`dashboard-updates:${myID}`)
-  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
-    const newMsg = payload.new;
-    
-    const isChannelMsg = !!newMsg.channel_id;
-    const isDirectMsg = newMsg.sender_id === myID || newMsg.recipient_id === myID;
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
+        const newMsg = payload.new;
+        
+        const isChannelMsg = !!newMsg.channel_id;
+        const isDirectMsg = newMsg.sender_id === myID || newMsg.recipient_id === myID;
 
-    if (isDirectMsg || isChannelMsg) {
-      const partnerId = isChannelMsg 
-        ? newMsg.channel_id.toString()
-        : (newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id);
+        if (isDirectMsg || isChannelMsg) {
+          const partnerId = isChannelMsg 
+            ? newMsg.channel_id.toString()
+            : (newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id);
 
-      let preview = isChannelMsg ? newMsg.content : "Encrypted message";
+          let preview = isChannelMsg ? newMsg.content : "Encrypted message";
 
-      if (!isChannelMsg) {
-        try {
-          const decrypted = await DecryptMessage(partnerId, newMsg.content);
-          if (decrypted) preview = decrypted;
-        } catch(e) {
-          console.error("Dashboard decryption error:", e);
+          if (!isChannelMsg) {
+            try {
+              const decrypted = await DecryptMessage(partnerId, newMsg.content);
+              if (decrypted) preview = decrypted;
+            } catch(e) {
+              console.error("Dashboard decryption error:", e);
+            }
+          }
+          
+          await useCacheStore.getState().updateLastMessage(myID, partnerId, preview, newMsg.created_at);
         }
-      }
-      
-      await updateLastMessage(myID, partnerId, preview, newMsg.created_at);
-    }
-  })
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, () => {
-    fetchAllData();
-  })
-  .subscribe();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, () => {
+        fetchAllData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, () => {
+        fetchAllData();
+      })
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channelSubscription);
     };
-  }, [myID, updateLastMessage]);
+  }, [myID, fetchAllData]);
+
+  useEffect(() => {
+    if (!activeChat) return;
+    
+    if (activeChat.type === 'channel') {
+      const updatedChan = channels.find(c => c.displayID === activeChat.displayID);
+      if (updatedChan && JSON.stringify(updatedChan) !== JSON.stringify(activeChat)) {
+        setActiveChat(updatedChan);
+      }
+    } else if (activeChat.type === 'group') {
+      const updatedGroup = myGroups.find(g => g.displayID === activeChat.displayID);
+      if (updatedGroup && JSON.stringify(updatedGroup) !== JSON.stringify(activeChat)) {
+        setActiveChat(updatedGroup);
+      }
+    } else if (activeChat.type === 'direct') {
+      const updatedConv = conversations.find(c => c.displayID === activeChat.displayID);
+      if (updatedConv && JSON.stringify(updatedConv) !== JSON.stringify(activeChat)) {
+        setActiveChat(updatedConv);
+      }
+    }
+  }, [channels, myGroups, conversations, activeChat]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -251,6 +311,9 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
       if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
         setIsProfileMenuOpen(false);
       }
+      if (sideNavRef.current && !sideNavRef.current.contains(e.target as Node)) {
+        setExpandedGroup(null);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -258,7 +321,7 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
 
   const filteredList = useMemo(() => {
     if (messageFilter === 'channels') return channels;
-    if (messageFilter === 'groups') return []; 
+    if (messageFilter === 'groups') return myGroups; 
     
     if (messageFilter === 'direct') {
       if (activeChat && activeChat.type === 'direct' && !conversations.some(c => c.displayID === activeChat.displayID)) {
@@ -267,12 +330,14 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
       return conversations;
     }
     return [];
-  }, [messageFilter, conversations, channels, activeChat]);
+  }, [messageFilter, conversations, channels, myGroups, activeChat]);
 
   const handleActionClick = (action: string) => {
     setIsActionMenuOpen(false);
     if (action === 'create_channel') {
       setIsCreateChannelOpen(true);
+    } else if (action === 'create_group') {
+      setIsCreateGroupOpen(true);
     } else {
       setIsSearchOpen(true);
     }
@@ -302,7 +367,7 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
               </button>
               <button onClick={() => { setIsSwitcherOpen(true); setIsProfileMenuOpen(false); }}>
                 <Users size={18} />
-                <span>Switch Identity</span>
+                <span>Switch Account</span>
               </button>
               <div className="divider"></div>
               <button className="logout-btn" onClick={onLogout}>
@@ -313,48 +378,63 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
           )}
         </div>
 
-        <nav className="side-nav">
-          <button className={activeTab === 'messages' ? 'active' : ''} onClick={() => setActiveTab('messages')}>
+        <nav className="side-nav" ref={sideNavRef}>
+          <button className={activeTab === 'messages' ? 'active' : ''} onClick={() => { setActiveTab('messages'); setExpandedGroup(null); }}>
             <MessageSquarePlus size={22} />
             <span className="tooltip">Messages</span>
           </button>
-          
-          <button className={activeTab === 'contacts' ? 'active' : ''} onClick={() => setActiveTab('contacts')}>
-            <Users size={22} />
-            <span className="tooltip">Contacts</span>
-          </button>
 
-          <button className={activeTab === 'bookmarks' ? 'active' : ''} onClick={() => setActiveTab('bookmarks')}>
-            <Bookmark size={22} />
-            <span className="tooltip">Saved</span>
-          </button>
+          <div className={`nav-group ${activeTab === 'drive' || activeTab === 'rss' ? 'active' : ''}`}>
+            <button className={expandedGroup === 'storage' ? 'group-trigger-active' : ''} onClick={() => setExpandedGroup(expandedGroup === 'storage' ? null : 'storage')}>
+              <HardDrive size={22} />
+              <span className="tooltip">Storage</span>
+            </button>
+            
+            {expandedGroup === 'storage' && (
+              <div className="submenu-dropdown-right glass-morphism animate-dropdown-right">
+                <button className={activeTab === 'drive' ? 'submenu-active' : ''} onClick={() => { setActiveTab('drive'); setExpandedGroup(null); }}>
+                  <Folder size={18} />
+                  <span>Cloud Drive</span>
+                </button>
+                <button className={activeTab === 'rss' ? 'submenu-active' : ''} onClick={() => { setActiveTab('rss'); setExpandedGroup(null); }}>
+                  <Rss size={18} />
+                  <span>RSS Feeds</span>
+                </button>
+              </div>
+            )}
+          </div>
 
-          <button className={activeTab === 'music' ? 'active' : ''} onClick={() => setActiveTab('music')}>
-            <Music size={22} />
-            <span className="tooltip">Music</span>
-          </button>
+          <div className={`nav-group ${activeTab === 'music' || activeTab === 'explore' ? 'active' : ''}`}>
+            <button className={expandedGroup === 'media' ? 'group-trigger-active' : ''} onClick={() => setExpandedGroup(expandedGroup === 'media' ? null : 'media')}>
+              <Compass size={22} />
+              <span className="tooltip">Media</span>
+            </button>
 
-          <button className={activeTab === 'explore' ? 'active' : ''} onClick={() => setActiveTab('explore')}>
-            <Compass size={22} />
-            <span className="tooltip">Explore</span>
-          </button>
-
-          <button className={activeTab === 'Drive' ? 'active' : ''} onClick={() => setActiveTab('Drive')}>
-            <HardDrive size={22} />
-            <span className="tooltip">Drive</span>
-          </button>
-
-          <button className={activeTab === 'RSS' ? 'active' : ''} onClick={() => setActiveTab('RSS')}>
-            <Rss size={22} />
-            <span className="tooltip">RSS</span>
-          </button>
+            {expandedGroup === 'media' && (
+              <div className="submenu-dropdown-right glass-morphism animate-dropdown-right">
+                <button className={activeTab === 'music' ? 'submenu-active' : ''} onClick={() => { setActiveTab('music'); setExpandedGroup(null); }}>
+                  <Music size={18} />
+                  <span>Music Player</span>
+                </button>
+                <button className={activeTab === 'explore' ? 'submenu-active' : ''} onClick={() => { setActiveTab('explore'); setExpandedGroup(null); }}>
+                  <Globe size={18} />
+                  <span>Explore</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="nav-spacer"></div>
 
           <button onClick={() => window.open('https://discord.gg/JjcTWnr8rm', '_blank')}>
             <DiscordIcon size={22} />
-            <span className="tooltip">Support</span>
+            <span className="tooltip">Discord</span>
           </button>
+
+          <button className={activeTab === 'notifications' ? 'active' : ''} onClick={() => { setActiveTab('notifications'); setExpandedGroup(null); }}>
+            <Bell size={22} />
+            <span className="tooltip">Notifications</span>
+          </button> 
 
           <button onClick={() => setIsSettingsOpen(true)}>
             <SettingsIcon size={22} />
@@ -380,6 +460,10 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
                 <button onClick={() => handleActionClick('new_chat')}>
                   <MessageSquarePlus size={18} />
                   <span>Start Direct Chat</span>
+                </button>
+                <button onClick={() => handleActionClick('create_group')}>
+                  <Users size={18} />
+                  <span>Create Group</span>
                 </button>
                 <button onClick={() => handleActionClick('create_channel')}>
                   <Megaphone size={18} />
@@ -442,6 +526,7 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
                 </div>
                 
                 {item.type === 'channel' && <div className="channel-badge">Public</div>}
+                {item.type === 'group' && <div className="channel-badge group-badge">Group</div>}
               </div>
             ))
           )}
@@ -457,6 +542,12 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
               channel={activeChat} 
               myID={myID} 
               onBack={() => setActiveChat(null)} 
+            />
+          ) : activeChat.type === 'group' ? (
+            <Group 
+              group={activeChat}
+              myID={myID}
+              onBack={() => setActiveChat(null)}
             />
           ) : (
             <Chat 
@@ -484,11 +575,29 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
         <SearchUser 
           onClose={() => setIsSearchOpen(false)} 
           onViewProfile={(user: any) => { 
-            setActiveChat({
-              ...user,
-              type: 'direct',
-              displayID: user.public_id
-            });
+            if (user.type === 'channel') {
+              setMessageFilter('channels');
+              setActiveChat({
+                ...user,
+                type: 'channel',
+                displayID: `channel_${user.id}`,
+                owner_id: user.owner_id || user.creator_id
+              });
+            } else if (user.type === 'group' || user.type === 'groups') {
+              setMessageFilter('groups');
+              setActiveChat({
+                ...user,
+                type: 'group',
+                displayID: `group_${user.id}`
+              });
+            } else {
+              setMessageFilter('direct');
+              setActiveChat({
+                ...user,
+                type: 'direct',
+                displayID: user.public_id || user.id
+              });
+            }
             setIsSearchOpen(false);
           }} 
         />
@@ -499,10 +608,11 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
           user={viewingUser} 
           onClose={() => setViewingUser(null)} 
           onStartChat={(user) => { 
+            setMessageFilter('direct');
             setActiveChat({
               ...user, 
               type: 'direct', 
-              displayID: user.public_id
+              displayID: user.public_id || user.id
             }); 
             setViewingUser(null); 
           }} 
@@ -520,13 +630,34 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
           onClose={() => setIsCreateChannelOpen(false)} 
           onCreated={(newChan) => {
             fetchAllData();
+            setMessageFilter('channels');
             setActiveChat({
               ...newChan, 
               type: 'channel', 
-              displayID: `channel_${newChan.id}`
+              displayID: `channel_${newChan.id}`,
+              owner_id: newChan.owner_id || myID
             });
             setIsCreateChannelOpen(false);
           }} 
+        />
+      )}
+
+      {isCreateGroupOpen && (
+        <CreateGroup 
+          myID={myID}
+          onClose={() => setIsCreateGroupOpen(false)}
+          onCreated={(newGroupId: string, groupName: string) => {
+              fetchAllData();
+              setMessageFilter('groups');
+              setActiveChat({
+                id: newGroupId,
+                name: groupName,
+                type: 'group',
+                displayID: `group_${newGroupId}`,
+                creator_id: myID
+              });
+              setIsCreateGroupOpen(false);
+          }}
         />
       )}
 
