@@ -19,9 +19,9 @@ Since Liora focuses on digital sovereignty and zero-knowledge architecture, we t
 If you discover a vulnerability, we appreciate your help in disclosing it to us in a responsible manner.
 
 ### How to report:
-1. **Private Contact:** Please send an email to `your-email@example.com`.
-2. **Details:** Include a detailed description of the vulnerability, steps to reproduce, and a potential PoC (Proof of Concept) if possible.
-3. **Response Time:** You can expect an initial response within 48-72 hours.
+1. **Private Contact:** Please send an email to `contact@ventie.dev`.
+3. **Details:** Include a detailed description of the vulnerability, steps to reproduce, and a potential PoC (Proof of Concept) if possible.
+4. **Response Time:** You can expect an initial response within 48-72 hours.
 
 ## Policy
 We will not take legal action against individuals who:
