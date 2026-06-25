@@ -4,11 +4,6 @@
 
 Liora is currently in active development. Security updates are prioritized for the latest beta releases.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| v0.1.x  | :white_check_mark: |
-| < v0.1  | :x:                |
-
 ## Our Security Commitment
 Since Liora focuses on digital sovereignty and zero-knowledge architecture, we take security reports very seriously. We use Ed25519 for identity and AES-256-GCM for all message payloads.
 
