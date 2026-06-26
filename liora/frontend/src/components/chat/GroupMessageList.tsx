@@ -1,14 +1,23 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, CheckCheck, Copy, Trash2, Reply, Share2, FileText, Download, Clock, X } from 'lucide-react';
+import { supabase } from '../../lib/supabaseClient';
 import { useMessageActions } from '../../hooks/useMessageActions';
 
-interface MessageListProps {
+interface GroupMessageListProps {
   messages: any[];
   myID: string;
   onDeleteMessage: (msgId: string) => void;
 }
 
-export default function MessageList({ messages, myID, onDeleteMessage }: MessageListProps) {
+interface UserProfile {
+  public_id: string;
+  username: string;
+  avatar_url?: string;
+}
+
+export default function GroupMessageList({ messages, myID, onDeleteMessage }: GroupMessageListProps) {
+  const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
+  
   const { 
     contextMenu, 
     handleContextMenu, 
@@ -28,8 +37,40 @@ export default function MessageList({ messages, myID, onDeleteMessage }: Message
 
   const isSelectionMode = selectedMessages.length > 0;
 
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const uniqueSenderIds = Array.from(new Set(messages.filter(m => m && m.sender_id).map(m => m.sender_id)));
+      const missingIds = uniqueSenderIds.filter(id => !profiles[id]);
+
+      if (missingIds.length === 0) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('public_id, username, avatar_url')
+          .in('public_id', missingIds);
+
+        if (!error && data) {
+          setProfiles(prev => {
+            const updated = { ...prev };
+            data.forEach((p: UserProfile) => {
+              updated[p.public_id] = p;
+            });
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load group senders profiles:', err);
+      }
+    };
+
+    if (messages.length > 0) {
+      fetchProfiles();
+    }
+  }, [messages]);
+
   const handleDeleteClick = () => {
-    const confirmDelete = window.confirm(`Удалить выбранные сообщения (${selectedMessages.length} шт.)?`);
+    const confirmDelete = window.confirm(`Удалить выбранные сообщения (${selectedMessages.length} шт.) для всех?`);
     if (confirmDelete) {
       deleteSelectedMessages();
     }
@@ -87,7 +128,7 @@ export default function MessageList({ messages, myID, onDeleteMessage }: Message
   };
 
   return (
-    <div className="messages-container">
+    <div className="messages-container tg-group-style">
       {isSelectionMode && (
         <div className="selection-panel-top glass-morphism">
           <div className="selection-info">
@@ -117,6 +158,10 @@ export default function MessageList({ messages, myID, onDeleteMessage }: Message
         const isMenuOpen = contextMenu?.msg?.id === msg.id;
         const isPending = !!msg.isOptimistic;
         const isSelected = selectedMessages.some(m => m.id === msg.id);
+        
+        const senderProfile = profiles[msg.sender_id];
+        const username = senderProfile?.username || `ID: ${msg.sender_id?.slice(0, 5)}`;
+        const avatarUrl = senderProfile?.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${msg.sender_id}`;
 
         const time = msg.created_at 
           ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -141,7 +186,19 @@ export default function MessageList({ messages, myID, onDeleteMessage }: Message
               onMouseEnter={() => enterSelection(msg)}
               onMouseUp={(e) => endSelection(e, msg)}
             >
+              {!isMine && (
+                <div className="message-avatar-holder">
+                  <img src={avatarUrl} alt={username} className="tg-sender-avatar" />
+                </div>
+              )}
+
               <div className={`message-bubble ${isMine ? 'glass-morphism-blue' : 'glass-morphism'} ${isPending ? 'pending' : ''}`}>
+                {!isMine && (
+                  <div className="tg-sender-name-tag">
+                    {username}
+                  </div>
+                )}
+
                 <div className="message-content">
                   {renderMessageContent(msg.content)}
                 </div>

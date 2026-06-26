@@ -12,11 +12,15 @@ interface SearchResult {
   is_verified?: boolean;
   type: 'user' | 'groups' | 'channel';
   member_count?: number;
+  name?: string;
+  description?: string;
+  creator_id?: string;
+  created_at?: string;
 }
 
 interface SearchUserProps {
   onClose: () => void;
-  onViewProfile: (item: SearchResult) => void; 
+  onViewProfile: (item: any) => void; 
 }
 
 type TabType = 'users' | 'groups' | 'channel' | 'code';
@@ -33,70 +37,56 @@ export default function SearchUser({ onClose, onViewProfile }: SearchUserProps) 
   const [codeStatus, setCodeStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    console.log("[SearchUser] Component mounted or parameters changed.");
-    return () => console.log("[SearchUser] Component unmounted.");
-  }, []);
-
-  useEffect(() => {
     let isCurrent = true;
 
-    console.log(`[SearchUser] Query changed: "${query}" (length: ${query.length})`);
-
     if (query.length < 2) {
-      console.log("[SearchUser] Query too short (< 2 chars). Resetting results.");
       setResults([]);
       setExpandedId(null);
       return;
     }
 
-    console.log("[SearchUser] Setting up debounce timer for 400ms...");
     const delayDebounceFn = setTimeout(async () => {
-      console.log(`[SearchUser] Debounce triggered for query: "${query}"`);
       setLoading(true);
       try {
-        console.log("[SearchUser] Invoking backend SearchUsers()...");
         const data = await SearchUsers(query);
-        console.log("[SearchUser] Raw backend response received:", data);
-        
-        if (!isCurrent) {
-          console.warn("[SearchUser] Race condition prevented: component state or query changed before response finalized.");
-          return;
-        }
+        if (!isCurrent) return;
 
-        const validatedData: SearchResult[] = (data || []).map((item: any, index: number) => {
+        const validatedData: SearchResult[] = (data || []).map((item: any) => {
           let resolvedType: 'user' | 'groups' | 'channel' = 'user';
-          if (item.type === 'channel') {
+          
+          if (item.type === 'channel' || item.type === 'channels') {
             resolvedType = 'channel';
           } else if (item.type === 'group' || item.type === 'groups') {
             resolvedType = 'groups';
           }
 
+          const resolvedId = item.id || item.public_id || item.group_id || '';
+          const resolvedName = item.name || item.username || 'Unnamed';
+
           return {
-            public_id: item.public_id || item.id || '',
-            username: item.username || item.name || 'Anonymous',
-            avatar_url: item.avatar_url,
+            public_id: String(resolvedId),
+            username: resolvedName,
+            avatar_url: item.avatar_url || '',
             is_verified: !!item.is_verified,
             type: resolvedType,
-            member_count: item.member_count || 0
+            member_count: item.member_count || 0,
+            name: resolvedName,
+            description: item.description || '',
+            creator_id: item.creator_id || '',
+            created_at: item.created_at || new Date().toISOString()
           };
         });
 
-        console.log("[SearchUser] Map & Validation complete. Transformed items:", validatedData);
         setResults(validatedData);
         setExpandedId(null);
       } catch (err) {
-        console.error("[SearchUser] Critical error scanning network via SearchUsers:", err);
         if (isCurrent) setResults([]);
       } finally {
-        if (isCurrent) {
-          console.log("[SearchUser] Loading execution finished.");
-          setLoading(false);
-        }
+        if (isCurrent) setLoading(false);
       }
     }, 400);
 
     return () => {
-      console.log(`[SearchUser] Cleanup: clearing debounce for query "${query}"`);
       isCurrent = false;
       clearTimeout(delayDebounceFn);
     };
@@ -113,61 +103,43 @@ export default function SearchUser({ onClose, onViewProfile }: SearchUserProps) 
       else if (item.type === 'groups') groups++;
     });
 
-    console.log("[SearchUser] Recalculated tabs metrics:", { users, channels, groups });
     return { users, channels, groups };
   }, [results]);
 
   const filteredResults = useMemo(() => {
-    const filtered = results.filter(item => {
+    return results.filter(item => {
       if (activeTab === 'users') return item.type === 'user';
       if (activeTab === 'channel') return item.type === 'channel';
       if (activeTab === 'groups') return item.type === 'groups';
       return false;
     });
-    console.log(`[SearchUser] Tab filtering executed [Target: ${activeTab}]. Matches found:`, filtered.length);
-    return filtered;
   }, [results, activeTab]);
 
   const toggleMiniProfile = (e: React.MouseEvent, publicId: string) => {
-    e.stopPropagation(); 
-    console.log(`[SearchUser] Toggling mini profile drawer for ID: ${publicId}`);
+    e.stopPropagation();
     setExpandedId(prev => prev === publicId ? null : publicId);
   };
 
   const handleConnectByCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log(`[SearchUser] Code form submission requested. Core reference: "${directCode}"`);
-    
-    if (!directCode.trim()) {
-      console.warn("[SearchUser] AddByCode aborted: empty raw token input.");
-      return;
-    }
-    if (codeLoading) {
-      console.warn("[SearchUser] AddByCode aborted: operation already in progress.");
-      return;
-    }
+    if (!directCode.trim() || codeLoading) return;
 
     setCodeLoading(true);
     setCodeStatus(null);
 
     try {
-      const targetToken = directCode.trim();
-      console.log(`[SearchUser] Invoking backend AddByCode() with token: "${targetToken}"`);
-      await AddByCode(targetToken);
-      console.log("[SearchUser] Backend successfully resolved and connected node via invitation mapping.");
+      await AddByCode(directCode.trim());
       setCodeStatus({ type: 'success', text: 'Identity decoded. Connection established successfully!' });
       setDirectCode('');
     } catch (err: any) {
-      console.error("[SearchUser] Backend execution failed inside AddByCode wrapper:", err);
       setCodeStatus({ type: 'error', text: err?.message || 'Failed to resolve entity code.' });
     } finally {
-      console.log("[SearchUser] AddByCode thread execution finished.");
       setCodeLoading(false);
     }
   };
 
   return (
-    <div className="search-modal-overlay" onClick={() => { console.log("[SearchUser] Overlay clicked. Triggering onClose..."); onClose(); }}>
+    <div className="search-modal-overlay" onClick={onClose}>
       <div className="search-modal-card" onClick={e => e.stopPropagation()}>
         
         <header className="search-header">
@@ -190,25 +162,25 @@ export default function SearchUser({ onClose, onViewProfile }: SearchUserProps) 
         <div className="search-tabs">
           <button 
             className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} 
-            onClick={() => { console.log("[SearchUser] Switched tab to 'users'"); setActiveTab('users'); setExpandedId(null); }}
+            onClick={() => { setActiveTab('users'); setExpandedId(null); }}
           >
             Identities ({counts.users})
           </button>
           <button 
             className={`tab-btn ${activeTab === 'groups' ? 'active' : ''}`} 
-            onClick={() => { console.log("[SearchUser] Switched tab to 'groups'"); setActiveTab('groups'); setExpandedId(null); }}
+            onClick={() => { setActiveTab('groups'); setExpandedId(null); }}
           >
             Groups ({counts.groups})
           </button>
           <button 
             className={`tab-btn ${activeTab === 'channel' ? 'active' : ''}`} 
-            onClick={() => { console.log("[SearchUser] Switched tab to 'channel'"); setActiveTab('channel'); setExpandedId(null); }}
+            onClick={() => { setActiveTab('channel'); setExpandedId(null); }}
           >
             Channels ({counts.channels})
           </button>
           <button 
             className={`tab-btn ${activeTab === 'code' ? 'active' : ''}`} 
-            onClick={() => { console.log("[SearchUser] Switched tab to 'code'"); setActiveTab('code'); setExpandedId(null); }}
+            onClick={() => { setActiveTab('code'); setExpandedId(null); }}
           >
             Via code
           </button>
@@ -257,7 +229,18 @@ export default function SearchUser({ onClose, onViewProfile }: SearchUserProps) 
               >
                 <div 
                   className="search-item"
-                  onClick={() => { console.log("[SearchUser] Item profile clicked:", item.public_id); onViewProfile(item); }} 
+                  onClick={() => { 
+                    onViewProfile({
+                      id: item.public_id,
+                      name: item.name,
+                      username: item.username !== item.name ? item.username : undefined,
+                      avatar_url: item.avatar_url,
+                      description: item.description,
+                      creator_id: item.creator_id,
+                      created_at: item.created_at,
+                      type: item.type
+                    }); 
+                  }} 
                 >
                   <div className="user-info">
                     <div className="avatar-small">

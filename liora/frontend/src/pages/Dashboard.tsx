@@ -10,7 +10,8 @@ import {
   Bell,
   Folder,
   Globe,
-  Music
+  Music,
+  Mic
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 // @ts-ignore
@@ -137,7 +138,8 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
         ...c,
         type: 'channel',
         displayID: `channel_${c.id}`, 
-        username: c.username || c.name,
+        username: c.name || c.username || "Unknown Channel",
+        name: c.name || c.username || "Unknown Channel",
         owner_id: c.owner_id,
         last_message: c.last_message || "Public Channel Content"
       }));
@@ -151,8 +153,8 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
     let loadedGroups: any[] = [];
     if (!groupError && groupMemberships) {
       loadedGroups = groupMemberships
-        .filter(m => m.groups !== null)
         .map(m => {
+          if (!m.groups) return null;
           const g = Array.isArray(m.groups) ? m.groups[0] : m.groups;
           if (!g) return null;
           
@@ -160,8 +162,10 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
             ...g,
             type: 'group',
             displayID: `group_${g.id}`,
-            username: g.username || g.name,
-            last_message: "Group Chat"
+            username: g.name || g.username || "Unknown Group",
+            name: g.name || g.username || "Unknown Group",
+            last_message: g.last_message || "Group Chat",
+            last_message_time: g.last_message_time || g.created_at
           };
         })
         .filter(Boolean); 
@@ -224,6 +228,7 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
           ...user,
           type: 'direct', 
           displayID: user.public_id,
+          username: user.username || "Anonymous",
           last_message: preview,
           last_message_time: msgData.last_time
         };
@@ -248,9 +253,38 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
         const newMsg = payload.new;
         
         const isChannelMsg = !!newMsg.channel_id;
+        const isGroupMsg = !!newMsg.group_id;
         const isDirectMsg = newMsg.sender_id === myID || newMsg.recipient_id === myID;
 
-        if (isDirectMsg || isChannelMsg) {
+        if (isGroupMsg) {
+          const groupId = newMsg.group_id.toString();
+          
+          let preview = newMsg.content || "Media Attachment";
+          if (preview.startsWith("IMAGE_URL:")) {
+            preview = "📷 Photo";
+          } else if (preview.startsWith("FILE_URL:")) {
+            preview = "📁 File";
+          }
+
+          setMyGroups(prevGroups => {
+            const updated = prevGroups.map(g => {
+              if (g.id.toString() === groupId) {
+                return {
+                  ...g,
+                  last_message: preview,
+                  last_message_time: newMsg.created_at
+                };
+              }
+              return g;
+            });
+            return updated.sort((a, b) => {
+              const timeA = a.last_message_time ? new Date(a.last_message_time).getTime() : 0;
+              const timeB = b.last_message_time ? new Date(b.last_message_time).getTime() : 0;
+              return timeB - timeA;
+            });
+          });
+        }
+        else if (isDirectMsg || isChannelMsg) {
           const partnerId = isChannelMsg 
             ? newMsg.channel_id.toString()
             : (newMsg.sender_id === myID ? newMsg.recipient_id : newMsg.sender_id);
@@ -321,7 +355,13 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
 
   const filteredList = useMemo(() => {
     if (messageFilter === 'channels') return channels;
-    if (messageFilter === 'groups') return myGroups; 
+    if (messageFilter === 'groups') {
+      return [...myGroups].sort((a, b) => {
+        const timeA = a.last_message_time ? new Date(a.last_message_time).getTime() : 0;
+        const timeB = b.last_message_time ? new Date(b.last_message_time).getTime() : 0;
+        return timeB - timeA;
+      });
+    }
     
     if (messageFilter === 'direct') {
       if (activeChat && activeChat.type === 'direct' && !conversations.some(c => c.displayID === activeChat.displayID)) {
@@ -469,6 +509,14 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
                   <Megaphone size={18} />
                   <span>Create Channel</span>
                 </button>
+                <button onClick={() => handleActionClick('create_private_channel')}>
+                  <Megaphone size={18} />
+                  <span>Create Private Channel</span>
+                </button>
+                <button onClick={() => handleActionClick('create_private_group')}>
+                  <Users size={18} />
+                  <span>Create Private Group</span>
+                </button>
               </div>
             )}
           </div>
@@ -484,51 +532,54 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
           <div className="search-icon">
             <Search size={16} />
           </div>
-          <input type="text" placeholder="Search identities..." readOnly />
+          <input type="text" placeholder="Search..." readOnly />
         </div>
 
         <div className="conversations">
           {filteredList.length === 0 ? (
             <div className="empty-list-info">
-              <p>{!isLoaded ? "Loading..." : "No conversations found"}</p>
+              <p>{!isLoaded ? "Loading..." : "Nothing is found"}</p>
             </div>
           ) : (
-            filteredList.map((item) => (
-              <div 
-                key={item.displayID} 
-                className={`conv-item ${activeChat?.displayID === item.displayID ? 'active' : ''}`}
-                onClick={() => setActiveChat(item)}
-              >
-                <div className="conv-avatar">
-                  {item.avatar_url ? (
-                    <img src={item.avatar_url} className="avatar-img" alt="" />
-                  ) : item.type === 'channel' ? (
-                    <div className="initials-avatar channel-avatar-placeholder">
-                      {(item.username || item.name || "CH").slice(0, 2).toUpperCase()}
-                    </div>
-                  ) : (
-                    <div className="initials-avatar">
-                      {(item.username || item.name || "UN").slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                
-                <div className="conv-content">
-                  <div className="conv-title">
-                    <span className="name">{item.username || item.name}</span>
-                    {item.last_message_time && (
-                      <span className="conv-time">
-                        {new Date(item.last_message_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+            filteredList.map((item) => {
+              const displayName = item.username || item.name || "Unknown";
+              return (
+                <div 
+                  key={item.displayID} 
+                  className={`conv-item ${activeChat?.displayID === item.displayID ? 'active' : ''}`}
+                  onClick={() => setActiveChat(item)}
+                >
+                  <div className="conv-avatar">
+                    {item.avatar_url ? (
+                      <img src={item.avatar_url} className="avatar-img" alt="" />
+                    ) : item.type === 'channel' ? (
+                      <div className="initials-avatar channel-avatar-placeholder">
+                        {displayName.slice(0, 2).toUpperCase()}
+                      </div>
+                    ) : (
+                      <div className="initials-avatar">
+                        {displayName.slice(0, 2).toUpperCase()}
+                      </div>
                     )}
                   </div>
-                  <p className="last-message">{item.last_message || "No messages yet"}</p>
+                  
+                  <div className="conv-content">
+                    <div className="conv-title">
+                      <span className="name">{displayName}</span>
+                      {item.last_message_time && (
+                        <span className="conv-time">
+                          {new Date(item.last_message_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    <p className="last-message">{item.last_message || "No messages yet"}</p>
+                  </div>
+                  
+                  {item.type === 'channel' && <div className="channel-badge">Public</div>}
+                  {item.type === 'group' && <div className="channel-badge group-badge">Group</div>}
                 </div>
-                
-                {item.type === 'channel' && <div className="channel-badge">Public</div>}
-                {item.type === 'group' && <div className="channel-badge group-badge">Group</div>}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>
@@ -581,6 +632,8 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
                 ...user,
                 type: 'channel',
                 displayID: `channel_${user.id}`,
+                username: user.name || user.username || "Unknown Channel",
+                name: user.name || user.username || "Unknown Channel",
                 owner_id: user.owner_id || user.creator_id
               });
             } else if (user.type === 'group' || user.type === 'groups') {
@@ -588,14 +641,17 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
               setActiveChat({
                 ...user,
                 type: 'group',
-                displayID: `group_${user.id}`
+                displayID: `group_${user.id}`,
+                username: user.name || user.username || "Unknown Group",
+                name: user.name || user.username || "Unknown Group"
               });
             } else {
               setMessageFilter('direct');
               setActiveChat({
                 ...user,
                 type: 'direct',
-                displayID: user.public_id || user.id
+                displayID: user.public_id || user.id,
+                username: user.username || "Anonymous"
               });
             }
             setIsSearchOpen(false);
@@ -612,7 +668,8 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
             setActiveChat({
               ...user, 
               type: 'direct', 
-              displayID: user.public_id || user.id
+              displayID: user.public_id || user.id,
+              username: user.username || "Anonymous"
             }); 
             setViewingUser(null); 
           }} 
@@ -635,6 +692,8 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
               ...newChan, 
               type: 'channel', 
               displayID: `channel_${newChan.id}`,
+              username: newChan.name || newChan.username || "Unknown Channel",
+              name: newChan.name || newChan.username || "Unknown Channel",
               owner_id: newChan.owner_id || myID
             });
             setIsCreateChannelOpen(false);
@@ -652,9 +711,12 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
               setActiveChat({
                 id: newGroupId,
                 name: groupName,
+                username: groupName,
                 type: 'group',
                 displayID: `group_${newGroupId}`,
-                creator_id: myID
+                creator_id: myID,
+                last_message: "Group Chat",
+                last_message_time: new Date().toISOString()
               });
               setIsCreateGroupOpen(false);
           }}

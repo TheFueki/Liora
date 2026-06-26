@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import MessageList from '../components/chat/MessageList';
 import ChatInput from '../components/chat/ChatInput';
-import { Phone, Video, MoreVertical, ShieldCheck, Hash } from 'lucide-react';
+import { Phone, Video, MoreVertical, ShieldCheck, Hash, User, Trash2, VolumeX } from 'lucide-react';
 // @ts-ignore
 import { DecryptMessage, SendMessage, GetMessages, DeleteMessageFromServer } from '../../wailsjs/go/main/App'; 
 import { useCacheStore } from '../components/services/cacheManager';
@@ -17,7 +17,9 @@ interface ChatProps {
 export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
   const [messages, setMessages] = useState<any[]>([]);
   const [isPartnerOnline, setIsPartnerOnline] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const isChannel = activeChat?.type === 'channel' || !!activeChat?.owner_id;
   const chatID = isChannel ? activeChat.id.toString() : activeChat?.public_id;
 
@@ -54,6 +56,21 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
       console.error("Failed to delete message:", err);
     }
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
 
   useEffect(() => {
     if (!chatID || !myID || isChannel) {
@@ -285,7 +302,7 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
           </div>
         </div>
 
-        <div className="header-actions">
+        <div className="header-actions" ref={menuRef}>
           {!isChannel && (
             <>
               <button className="action-btn" title="Voice Call"><Phone size={20} /></button>
@@ -293,7 +310,31 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
               <div className="divider-v"></div>
             </>
           )}
-          <button className="action-btn" title="More"><MoreVertical size={20} /></button>
+          <button 
+            className={`action-btn ${isMenuOpen ? 'active' : ''}`} 
+            title="More" 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
+            <MoreVertical size={20} />
+          </button>
+
+          {isMenuOpen && (
+            <div className="dropdown-menu telegram-style animate-scale-up">
+              <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); handleHeaderClick(); }}>
+                <User size={16} />
+                <span>View Info</span>
+              </button>
+              <button className="dropdown-item">
+                <VolumeX size={16} />
+                <span>Mute Notifications</span>
+              </button>
+              <div className="dropdown-divider"></div>
+              <button className="dropdown-item delete">
+                <Trash2 size={16} />
+                <span>Delete Chat</span>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

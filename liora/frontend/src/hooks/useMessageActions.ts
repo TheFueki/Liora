@@ -7,16 +7,18 @@ interface ContextMenu {
 }
 
 interface UseMessageActionsProps {
+  currentUserId: string;
   onDeleteMessage?: (msgId: string) => void;
   onDeleteMultipleMessages?: (msgIds: string[]) => void;
 }
 
-export const useMessageActions = ({ onDeleteMessage, onDeleteMultipleMessages }: UseMessageActionsProps = {}) => {
+export const useMessageActions = ({ currentUserId, onDeleteMessage, onDeleteMultipleMessages }: UseMessageActionsProps) => {
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [selectedMessages, setSelectedMessages] = useState<any[]>([]);
   
   const isDraggingRef = useRef(false);
   const startIdRef = useRef<string | null>(null);
+  const hasMovedRef = useRef(false);
 
   const closeMenu = useCallback(() => {
     setContextMenu(null);
@@ -34,19 +36,35 @@ export const useMessageActions = ({ onDeleteMessage, onDeleteMultipleMessages }:
     if (e.button !== 0) return; 
     isDraggingRef.current = true;
     startIdRef.current = msg.id;
-    
-    if (!e.shiftKey && !selectedMessages.some(m => m.id === msg.id)) {
-      setSelectedMessages([msg]);
-    }
+    hasMovedRef.current = false;
   };
 
   const enterSelection = (msg: any) => {
     if (!isDraggingRef.current || !startIdRef.current) return;
+    hasMovedRef.current = true;
 
     setSelectedMessages((prev) => {
       if (prev.some(m => m.id === msg.id)) return prev;
       return [...prev, msg];
     });
+  };
+
+  const endSelection = (e: React.MouseEvent, msg: any) => {
+    if (!isDraggingRef.current) return;
+    
+    if (!hasMovedRef.current) {
+      setSelectedMessages((prev) => {
+        const isAlreadySelected = prev.some(m => m.id === msg.id);
+        if (isAlreadySelected) {
+          return prev.filter(m => m.id !== msg.id);
+        } else {
+          return [...prev, msg];
+        }
+      });
+    }
+
+    isDraggingRef.current = false;
+    startIdRef.current = null;
   };
 
   const copyMessage = (text: string) => {
@@ -62,16 +80,22 @@ export const useMessageActions = ({ onDeleteMessage, onDeleteMultipleMessages }:
     if (textToCopy) navigator.clipboard.writeText(textToCopy);
   };
 
-  const deleteSingleMessage = (msgId: string) => {
+  const deleteSingleMessage = (msgId: string, msgOwnerId: string) => {
+    if (msgOwnerId !== currentUserId) return;
+    
     if (onDeleteMessage) onDeleteMessage(msgId);
     closeMenu();
   };
 
   const deleteSelectedMessages = () => {
+    const onlyMyMessages = selectedMessages.filter(m => m.sender_id === currentUserId);
+    
+    if (onlyMyMessages.length === 0) return;
+
     if (onDeleteMultipleMessages) {
-      onDeleteMultipleMessages(selectedMessages.map(m => m.id));
+      onDeleteMultipleMessages(onlyMyMessages.map(m => m.id));
     } else if (onDeleteMessage) {
-      selectedMessages.forEach(m => onDeleteMessage(m.id));
+      onlyMyMessages.forEach(m => onDeleteMessage(m.id));
     }
     setSelectedMessages([]);
   };
@@ -81,13 +105,13 @@ export const useMessageActions = ({ onDeleteMessage, onDeleteMultipleMessages }:
   };
 
   useEffect(() => {
-    const handleMouseUp = () => {
+    const handleGlobalMouseUp = () => {
       isDraggingRef.current = false;
       startIdRef.current = null;
     };
 
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
   }, []);
 
   useEffect(() => {
@@ -103,6 +127,7 @@ export const useMessageActions = ({ onDeleteMessage, onDeleteMultipleMessages }:
     setSelectedMessages,
     startSelection,
     enterSelection,
+    endSelection,
     handleContextMenu,
     copyMessage,
     copySelectedText,

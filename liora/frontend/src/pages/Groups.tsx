@@ -5,7 +5,7 @@ import {
     Info, Settings, Trash2, Calendar, Copy, Check, Edit2, Save, X as CloseIcon
 } from 'lucide-react';
 import { SendGroupMessage, GetGroupMessages } from '../../wailsjs/go/main/App';
-import MessageList from '../components/chat/MessageList';
+import MessageList from '../components/chat/GroupMessageList';
 import ChatInput from '../components/chat/ChatInput';
 import "../styles/Groups.scss";
 
@@ -15,7 +15,7 @@ interface GroupData {
     username?: string;
     avatar_url?: string;
     description: string;
-    creator_id: string;
+    creator_id?: string;
     created_at: string;
 }
 
@@ -26,17 +26,17 @@ interface GroupProps {
 }
 
 export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack }) => {
-    if (!initialGroup || !initialGroup.creator_id) {
+    if (!initialGroup) {
         return (
             <div className="channel-loading">
                 <button onClick={onBack}>Back</button>
-                <p>Loading group data or missing creator_id...</p>
+                <p>Loading group data...</p>
             </div>
         );
     }
 
     const [currentGroup, setCurrentGroup] = useState<GroupData>(initialGroup);
-    const isOwner = myID === currentGroup.creator_id;
+    const isOwner = currentGroup.creator_id ? myID === currentGroup.creator_id : false;
     
     const [messages, setMessages] = useState<any[]>([]);
     const [showInfoModal, setShowInfoModal] = useState(false);
@@ -68,7 +68,25 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
             setMessages(history || []);
             setTimeout(() => scrollToBottom("auto"), 100);
         } catch (err) {
-            console.error("Failed to load messages:", err);
+            console.error(err);
+        }
+    };
+
+    const fetchGroupDetails = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('groups')
+                .select('id, name, username, avatar_url, description, creator_id, created_at')
+                .eq('id', currentGroup.id)
+                .single();
+
+            if (!error && data) {
+                setCurrentGroup(data);
+                setAvatarUrlInput(data.avatar_url || '');
+                setDescriptionInput(data.description || '');
+            }
+        } catch (err) {
+            console.error("Error fetching group details:", err);
         }
     };
 
@@ -113,7 +131,7 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
             }));
             setIsEditingSettings(false);
         } catch (err) {
-            console.error("Update group profile error:", err);
+            console.error(err);
             alert("Failed to update group parameters");
         } finally {
             setIsSavingSettings(false);
@@ -134,7 +152,7 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
             setShowInfoModal(false);
             onBack(); 
         } catch (err) {
-            console.error("Delete error:", err);
+            console.error(err);
             alert("Failed to delete group");
         } finally {
             setIsDeleting(false);
@@ -143,6 +161,7 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
 
     useEffect(() => {
         loadMessages();
+        fetchGroupDetails();
         fetchMemberCount();
 
         const groupSubscription = supabase
@@ -171,7 +190,7 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
         try {
             await SendGroupMessage(currentGroup.id.toString(), content); 
         } catch (err) {
-            console.error("Send error:", err);
+            console.error(err);
         }
     };
 
@@ -188,8 +207,8 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
                             {currentGroup.avatar_url ? (
                                 <img src={currentGroup.avatar_url} alt={currentGroup.name} className="channel-image" />
                             ) : (
-                                <div className="channel-icon-fallback">
-                                    <Users size={20} />
+                                <div className="channel-avatar-hash">
+                                    {currentGroup.name.substring(0, 2)}
                                 </div>
                             )}
                         </div>
@@ -244,7 +263,7 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
                                         <img src={currentGroup.avatar_url} alt={currentGroup.name} className="modal-channel-image" />
                                     ) : (
                                         <div className="modal-avatar-hash">
-                                            <Users size={24} />
+                                            {currentGroup.name.substring(0, 2)}
                                         </div>
                                     )}
                                 </div>
@@ -266,7 +285,7 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
                                 <div className="grid-stat-card">
                                     <Calendar size={20} />
                                     <div className="stat-value">
-                                        {new Date(currentGroup.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                                        {currentGroup.created_at ? new Date(currentGroup.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '...'}
                                     </div>
                                     <div className="stat-label">Created</div>
                                 </div>

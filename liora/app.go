@@ -403,16 +403,54 @@ func (a *App) SearchUsers(query string) ([]map[string]interface{}, error) {
 		return []map[string]interface{}{}, nil
 	}
 
-	var results []map[string]interface{}
-	filter := fmt.Sprintf("username.ilike.%%%s%%,public_id.ilike.%%%s%%", query, query)
+	var combinedResults []map[string]interface{}
 
+	var userResults []map[string]interface{}
+	userFilter := fmt.Sprintf("username.ilike.%%%s%%,public_id.ilike.%%%s%%", query, query)
 	_, err := a.client.From("profiles").
 		Select("*", "exact", false).
-		Or(filter, "").
-		Limit(10, "").
-		ExecuteTo(&results)
+		Or(userFilter, "").
+		Limit(5, "").
+		ExecuteTo(&userResults)
 
-	return results, err
+	if err == nil {
+		for _, u := range userResults {
+			u["type"] = "user"
+			combinedResults = append(combinedResults, u)
+		}
+	}
+
+	var groupResults []map[string]interface{}
+	groupFilter := fmt.Sprintf("name.ilike.%%%s%%,username.ilike.%%%s%%", query, query)
+	_, err = a.client.From("groups").
+		Select("*", "exact", false).
+		Or(groupFilter, "").
+		Limit(5, "").
+		ExecuteTo(&groupResults)
+
+	if err == nil {
+		for _, g := range groupResults {
+			g["type"] = "group"
+			combinedResults = append(combinedResults, g)
+		}
+	}
+
+	var channelResults []map[string]interface{}
+	channelFilter := fmt.Sprintf("name.ilike.%%%s%%,username.ilike.%%%s%%", query, query)
+	_, err = a.client.From("channels").
+		Select("*", "exact", false).
+		Or(channelFilter, "").
+		Limit(5, "").
+		ExecuteTo(&channelResults)
+
+	if err == nil {
+		for _, c := range channelResults {
+			c["type"] = "channel"
+			combinedResults = append(combinedResults, c)
+		}
+	}
+
+	return combinedResults, nil
 }
 
 func (a *App) uploadFileToStorage(filePath string) (string, error) {
