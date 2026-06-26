@@ -6,6 +6,7 @@ interface MessageListProps {
   messages: any[];
   myID: string;
   onDeleteMessage: (msgId: string) => void;
+  onViewProfile?: (item: any) => void;
 }
 
 export default function MessageList({ messages, myID, onDeleteMessage }: MessageListProps) {

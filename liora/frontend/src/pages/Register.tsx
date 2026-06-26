@@ -140,7 +140,7 @@ export default function Register({ onComplete }: RegisterProps) {
             <Shield size={42} className="shield-icon" />
           </div>
           <h1 className="glitch" data-text="LIORA">Liora</h1>
-          <p className="subtitle">Strictly Anonymous Messaging</p>
+          <p className="subtitle">Anonymous Messaging</p>
         </div>
 
         <div className="auth-body">
@@ -250,7 +250,6 @@ export default function Register({ onComplete }: RegisterProps) {
               <div className="orbit-spinner">
                 <Loader2 className="spin" size={40} />
               </div>
-              <p className="status-text">HANDSHAKE</p>
               <span className="sub-status">Finalizing...</span>
             </div>
           )}

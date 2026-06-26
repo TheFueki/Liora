@@ -20,7 +20,7 @@ interface SearchResult {
 
 interface SearchUserProps {
   onClose: () => void;
-  onViewProfile: (item: any) => void; 
+  onViewProfile?: (item: any) => void;
 }
 
 type TabType = 'users' | 'groups' | 'channel' | 'code';
@@ -230,7 +230,7 @@ export default function SearchUser({ onClose, onViewProfile }: SearchUserProps) 
                 <div 
                   className="search-item"
                   onClick={() => { 
-                    onViewProfile({
+                    onViewProfile?.({
                       id: item.public_id,
                       name: item.name,
                       username: item.username !== item.name ? item.username : undefined,

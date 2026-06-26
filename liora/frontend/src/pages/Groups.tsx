@@ -23,9 +23,10 @@ interface GroupProps {
     group: GroupData | null; 
     myID: string;
     onBack: () => void;
+    onViewProfile?: (item: any) => void; 
 }
 
-export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack }) => {
+export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack, onViewProfile }) => {
     if (!initialGroup) {
         return (
             <div className="channel-loading">
@@ -37,7 +38,6 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
 
     const [currentGroup, setCurrentGroup] = useState<GroupData>(initialGroup);
     const isOwner = currentGroup.creator_id ? myID === currentGroup.creator_id : false;
-    
     const [messages, setMessages] = useState<any[]>([]);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -159,6 +159,18 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
         }
     };
 
+    const handleDeleteMessage = async (msgId: string) => {
+        setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
+        try {
+            await supabase
+                .from('group_messages')
+                .delete()
+                .eq('id', msgId);
+        } catch (err) {
+            console.error("Failed to delete group message:", err);
+        }
+    };
+
     useEffect(() => {
         loadMessages();
         fetchGroupDetails();
@@ -168,15 +180,26 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
             .channel(`group_realtime:${currentGroup.id}`)
             .on('postgres_changes', 
                 { 
-                    event: 'INSERT', 
+                    event: '*', 
                     schema: 'public', 
                     table: 'group_messages',
                     filter: `group_id=eq.${currentGroup.id}` 
                 }, 
                 async (payload) => {
-                    const newMsg = payload.new;
-                    setMessages((prev) => [...prev, newMsg]);
-                    setTimeout(() => scrollToBottom(), 50);
+                    if (payload.eventType === 'DELETE') {
+                        const deletedId = payload.old.id;
+                        setMessages((prev) => prev.filter(m => m.id !== deletedId));
+                        return;
+                    }
+
+                    if (payload.eventType === 'INSERT') {
+                        const newMsg = payload.new;
+                        setMessages((prev) => {
+                            if (prev.some(m => m.id === newMsg.id)) return prev;
+                            return [...prev, newMsg];
+                        });
+                        setTimeout(() => scrollToBottom(), 50);
+                    }
                 }
             )
             .subscribe();
@@ -187,8 +210,9 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
     }, [currentGroup.id]);
 
     const handleSend = async (content: string) => {
+        if (!content.trim()) return;
         try {
-            await SendGroupMessage(currentGroup.id.toString(), content); 
+            await SendGroupMessage(currentGroup.id.toString(), content.trim()); 
         } catch (err) {
             console.error(err);
         }
@@ -241,7 +265,12 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack 
                 </header>
 
                 <div className="messages-scroll-area">
-                    <MessageList messages={messages} myID={myID} />
+                    <MessageList 
+                        messages={messages} 
+                        myID={myID} 
+                        onDeleteMessage={handleDeleteMessage}
+                        onViewProfile={onViewProfile} 
+                    />
                     <div ref={messagesEndRef} />
                 </div>
 

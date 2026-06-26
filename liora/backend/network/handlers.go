@@ -15,7 +15,7 @@ import (
 func HandleIncomingMessage(ctx context.Context, msg Message) {
 	myPrivBytes, err := vault.LoadPrivateKey()
 	if err != nil {
-		fmt.Println("Critical: Could not load private key for decryption")
+		fmt.Println("Could not load private key for decryption")
 		return
 	}
 
@@ -56,5 +56,5 @@ func HandleIncomingMessage(ctx context.Context, msg Message) {
 		"timestamp": timestamp,
 	})
 
-	fmt.Printf("✔ Processed E2EE message from %s\n", crypto.GenerateShortID(msg.Sender))
+	fmt.Printf("Processed E2EE message from %s\n", crypto.GenerateShortID(msg.Sender))
 }

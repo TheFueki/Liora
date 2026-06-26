@@ -37,9 +37,10 @@ interface Account {
 
 interface DashboardProps {
   myID: string;
-  setActiveScreen: (screen: 'register' | 'dashboard' | 'profile' | 'settings') => void;
   profile: any;
-  onLogout: () => void; 
+  setActiveScreen: (s: any) => void;
+  onLogout: () => void;
+  onViewProfile?: (user: any) => void;
 }
 
 function AccountSwitcher({ onSelect, onAddNew }: { onSelect: (id: string) => void, onAddNew: () => void }) {
@@ -82,7 +83,7 @@ function AccountSwitcher({ onSelect, onAddNew }: { onSelect: (id: string) => voi
   );
 }
 
-export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: DashboardProps) {
+export default function Dashboard({ myID, setActiveScreen, profile, onLogout, onViewProfile }: DashboardProps) {
   const CACHE_KEY = useMemo(() => `liora_convs_${myID}`, [myID]);
   const [activeTab, setActiveTab] = useState('messages'); 
   const [messageFilter, setMessageFilter] = useState<'direct' | 'groups' | 'channels'>('direct');
@@ -595,10 +596,11 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
               onBack={() => setActiveChat(null)} 
             />
           ) : activeChat.type === 'group' ? (
-            <Group 
+            <Group  
               group={activeChat}
               myID={myID}
               onBack={() => setActiveChat(null)}
+              onViewProfile={(user) => setViewingUser(user)}
             />
           ) : (
             <Chat 
@@ -613,9 +615,9 @@ export default function Dashboard({ myID, setActiveScreen, profile, onLogout }: 
               <img src={userPhoto} alt="Liora Security" style={{ width: '120px', borderRadius: '50%' }} />
             </div>
             <h2>Liora Secure Environment</h2>
-            <p>Every message is encrypted locally before transit.</p>
+            <p>Private Messenger</p>
             <div className="id-badge">
-              <span className="label">ACTIVE_ID:</span>
+              <span className="label">ID:</span>
               <code>{myID}</code>
             </div>
           </div>

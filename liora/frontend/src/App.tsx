@@ -6,7 +6,7 @@ import Settings from './pages/Settings';
 import Contacts from './pages/Contacts';
 import SearchUser from './pages/SearchUser';
 import CreateChannel from './pages/CreateChannel';
-import Channel from './pages/Channel';
+import OtherProfile from './pages/OtherProfile'; 
 import './App.css';
 import { GetMyInfo } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime'; 
@@ -17,6 +17,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>('register');
   const [myID, setMyID] = useState('');
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [selectedUserProfile, setSelectedUserProfile] = useState<any>(null); 
   const [loading, setLoading] = useState(true);
 
   const refreshProfile = () => {
@@ -57,24 +58,23 @@ function App() {
     refreshProfile().then(() => setScreen('dashboard'));
   };
 
+  const handleStartChat = (user: any) => {
+    console.log("Starting chat from profile with:", user);
+  };
+
   if (loading) {
-  return (
-    <div className="liora-splash-screen">
-      <div className="splash-backdrop" />
-      <div className="splash-content">
-        <div className="splash-logo-container">
-          <div className="splash-glow" />
-          <div className="splash-icon">Ω</div>
-        </div>
-        <h1 className="splash-title">Liora Messenger</h1>
-        <p className="splash-subtitle">Initializing...</p>
-        <div className="splash-loader-bar">
-          <div className="splash-loader-progress" />
+    return (
+      <div className="liora-splash-screen">
+        <div className="splash-backdrop" />
+        <div className="splash-content">
+          <p className="splash-subtitle">Initializing...</p>
+          <div className="splash-loader-bar">
+            <div className="splash-loader-progress" />
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   return (
     <div className="liora-app-container">
@@ -88,6 +88,7 @@ function App() {
           profile={userProfile} 
           setActiveScreen={(s: Screen) => setScreen(s)} 
           onLogout={handleLogout}
+          onViewProfile={(user) => setSelectedUserProfile(user)} 
         />
       )}
 
@@ -103,12 +104,24 @@ function App() {
       }
       {screen === 'contacts' && <Contacts onClose={() => setScreen('dashboard')} />}
       {screen === 'search' && <SearchUser onClose={() => setScreen('dashboard')} />}
-      {screen === 'create_channel' && (<CreateChannel myID={myID} onClose={() => setScreen('dashboard')} onCreated={(newChannel) => {
-      console.log("Channel created successfully:", newChannel);
-      setScreen('dashboard');
-    }} 
-  />
-)}
+      {screen === 'create_channel' && (
+        <CreateChannel 
+          myID={myID} 
+          onClose={() => setScreen('dashboard')} 
+          onCreated={(newChannel) => {
+            console.log("Channel created successfully:", newChannel);
+            setScreen('dashboard');
+          }} 
+        />
+      )}
+
+      {selectedUserProfile && (
+        <OtherProfile 
+          user={selectedUserProfile}
+          onClose={() => setSelectedUserProfile(null)}
+          onStartChat={handleStartChat}
+        />
+      )}
     </div>
   );
 }

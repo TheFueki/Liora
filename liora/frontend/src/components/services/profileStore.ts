@@ -29,7 +29,7 @@ export const useProfileStore = create<ProfileState>()(
       }),
     }),
     {
-      name: 'liora_multi_profile_cache',
+      name: 'multi_profile_cache',
     }
   )
 );

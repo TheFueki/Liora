@@ -14,7 +14,8 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
 
   if (!user) return null;
 
-  const avatar = user.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.public_id}`;
+  const userId = user.public_id || user.id || '';
+  const avatar = user.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${userId}`;
 
   const handleMessageClick = () => {
     if (typeof onStartChat === 'function') {
@@ -25,8 +26,9 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
 
   const handleCopyId = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!userId) return;
     try {
-      await navigator.clipboard.writeText(user.public_id);
+      await navigator.clipboard.writeText(userId);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -59,9 +61,9 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
             <div className="id-badge" onClick={handleCopyId} title="Click to copy Public ID">
               <Fingerprint size={14} className="fingerprint-icon" />
               <code>
-                {user.public_id.length > 20 
-                  ? `${user.public_id.slice(0, 12)}...${user.public_id.slice(-8)}` 
-                  : user.public_id}
+                {userId.length > 20 
+                  ? `${userId.slice(0, 12)}...${userId.slice(-8)}` 
+                  : userId || "Unknown ID"}
               </code>
               <div className="copy-indicator">
                 {copied ? <Check size={12} className="text-green" /> : <Copy size={12} />}
@@ -71,14 +73,10 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
         </div>
 
         <div className="profile-body">
-          <div className="protocol-info">
-            <Info size={16} />
-            <span>Node: Handshake is active</span>
-          </div>
           
           <div className="bio-section">
             <label>Bio</label>
-            <p>{user.bio || "No bio found."}</p>
+            <p>{user.bio || user.description || "No bio found."}</p>
           </div>
         </div>
 
@@ -86,8 +84,8 @@ export default function OtherProfile({ user, onClose, onAddContact, onStartChat 
           <button 
             type="button" 
             className="btn-add" 
-            onClick={() => onAddContact?.(user.public_id)}
-            disabled={!onAddContact}
+            onClick={() => onAddContact?.(userId)}
+            disabled={!onAddContact || !userId}
           >
             <UserPlus size={18} /> 
             <span>Add Contact</span>

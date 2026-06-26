@@ -211,8 +211,7 @@ func (a *App) EncryptMessage(theirPubKeyHex string, plaintext string) (string, e
 }
 
 func (a *App) DecryptMessage(senderPubKeyHex string, ciphertextHex string) (string, error) {
-	fmt.Printf("[DEBUG-CRYPTO] === НАЧАЛО ДЕШИФРОВАНИЯ ===\n")
-	fmt.Printf("[DEBUG-CRYPTO] Мой Public ID (a.myID): %s\n", a.myID)
+	fmt.Printf("[DEBUG-CRYPTO] Public ID (a.myID): %s\n", a.myID)
 	fmt.Printf("[DEBUG-CRYPTO] Переданный ключ отправителя (senderPubKeyHex): %s\n", senderPubKeyHex)
 	fmt.Printf("[DEBUG-CRYPTO] Длина шифротекста (ciphertextHex): %d символов\n", len(ciphertextHex))
 

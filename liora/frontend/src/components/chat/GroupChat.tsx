@@ -23,9 +23,10 @@ interface GroupChatProps {
     group: GroupData | null; 
     myID: string;
     onBack: () => void;
+    onViewProfile?: (item: any) => void;
 }
 
-export const GroupChat: React.FC<GroupChatProps> = ({ group: initialGroup, myID, onBack }) => {
+export const GroupChat: React.FC<GroupChatProps> = ({ group: initialGroup, myID, onBack, onViewProfile }) => {
     if (!initialGroup || !initialGroup.creator_id) {
         return (
             <div className="channel-loading">
@@ -249,7 +250,12 @@ export const GroupChat: React.FC<GroupChatProps> = ({ group: initialGroup, myID,
                 </header>
 
                 <div className="messages-scroll-area">
-                    <MessageList messages={messages} myID={myID} onDeleteMessage={handleDeleteMessage} />
+                    <MessageList 
+                        messages={messages} 
+                        myID={myID} 
+                        onDeleteMessage={handleDeleteMessage} 
+                        onViewProfile={onViewProfile}
+                    />
                     <div ref={messagesEndRef} />
                 </div>
 
