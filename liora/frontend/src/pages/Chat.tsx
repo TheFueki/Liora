@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import MessageList from '../components/chat/MessageList';
 import ChatInput from '../components/chat/ChatInput';
+import CallOverlay from '../components/chat/CallOverlay';
+import { useWebRTC } from '../hooks/useWebRTC';
 import { Phone, Video, MoreVertical, ShieldCheck, Hash, User, Trash2, VolumeX } from 'lucide-react';
 // @ts-ignore
 import { DecryptMessage, SendMessage, GetMessages, DeleteMessageFromServer } from '../../wailsjs/go/main/App'; 
@@ -18,12 +20,14 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
   const [messages, setMessages] = useState<any[]>([]);
   const [isPartnerOnline, setIsPartnerOnline] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isCallActive, setIsCallActive] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const isChannel = activeChat?.type === 'channel' || !!activeChat?.owner_id;
   const chatID = isChannel ? activeChat.id.toString() : activeChat?.public_id;
 
   const { getMessages, saveMessages } = useCacheStore();
+  const { startCall, endCall, localStream, remoteStream } = useWebRTC(chatID, myID);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -35,6 +39,27 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
     } else {
       console.log("Channel details:", activeChat);
     }
+  };
+
+  const handleInitiateCall = async (isVideo: boolean) => {
+    const callType = isVideo ? 'VIDEO' : 'VOICE';
+    console.log(`[VOICE CALL] Initializing ${callType} call. Target Chat ID: ${chatID}, Initiator ID: ${myID}`);
+    
+    setIsCallActive(true);
+    try {
+      await startCall(isVideo);
+      console.log(`[VOICE CALL] Local media stream successfully captured for ${callType} call.`);
+    } catch (err) {
+      console.error(`[VOICE CALL] Failed to establish local media stream:`, err);
+      setIsCallActive(false);
+    }
+  };
+
+  const handleHangUp = () => {
+    console.log(`[VOICE CALL] Hanging up terminating session with Chat ID: ${chatID}`);
+    endCall();
+    setIsCallActive(false);
+    console.log(`[VOICE CALL] WebRTC peer connection cleared and local streams stopped.`);
   };
 
   const handleDeleteMessage = async (msgId: string) => {
@@ -56,6 +81,18 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
       console.error("Failed to delete message:", err);
     }
   };
+
+  useEffect(() => {
+    if (localStream) {
+      console.log(`[VOICE CALL] Local stream updated. Active tracks:`, localStream.getTracks().map(t => t.kind));
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteStream) {
+      console.log(`[VOICE CALL] Remote stream received. Processing incoming tracks:`, remoteStream.getTracks().map(t => t.kind));
+    }
+  }, [remoteStream]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -257,6 +294,14 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
 
   return (
     <div className="chat-active-interface animate-fade">
+      {isCallActive && (
+        <CallOverlay 
+          localStream={localStream} 
+          remoteStream={remoteStream} 
+          onHangUp={handleHangUp} 
+        />
+      )}
+
       <header className="chat-header glass-morphism">
         <div 
           className="header-info" 
@@ -305,8 +350,12 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
         <div className="header-actions" ref={menuRef}>
           {!isChannel && (
             <>
-              <button className="action-btn" title="Voice Call"><Phone size={20} /></button>
-              <button className="action-btn" title="Video Call"><Video size={20} /></button>
+              <button className="action-btn" title="Voice Call" onClick={() => handleInitiateCall(false)}>
+                <Phone size={20} />
+              </button>
+              <button className="action-btn" title="Video Call" onClick={() => handleInitiateCall(true)}>
+                <Video size={20} />
+              </button>
               <div className="divider-v"></div>
             </>
           )}
