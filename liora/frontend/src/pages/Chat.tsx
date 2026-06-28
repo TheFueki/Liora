@@ -4,8 +4,7 @@ import MessageList from '../components/chat/MessageList';
 import ChatInput from '../components/chat/ChatInput';
 import CallOverlay from '../components/chat/CallOverlay';
 import { useWebRTC } from '../hooks/useWebRTC';
-import { Phone, Video, MoreVertical, ShieldCheck, Hash, User, Trash2, VolumeX } from 'lucide-react';
-// @ts-ignore
+import { Phone, Video, MoreVertical, Hash, User, Trash2, VolumeX } from 'lucide-react';
 import { DecryptMessage, SendMessage, GetMessages, DeleteMessageFromServer } from '../../wailsjs/go/main/App'; 
 import { useCacheStore } from '../components/services/cacheManager';
 import '../styles/Chat.scss';
@@ -21,11 +20,12 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
   const [isPartnerOnline, setIsPartnerOnline] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCallActive, setIsCallActive] = useState(false);
+  const [pendingCallType, setPendingCallType] = useState<'voice' | 'video' | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const isChannel = activeChat?.type === 'channel' || !!activeChat?.owner_id;
   const chatID = isChannel ? activeChat.id.toString() : activeChat?.public_id;
-
+  const [callStatus, setCallStatus] = useState<'dialing' | 'ringing' | 'connected' | 'disconnected'>('dialing');
   const { getMessages, saveMessages } = useCacheStore();
   const { startCall, endCall, localStream, remoteStream } = useWebRTC(chatID, myID);
 
@@ -41,11 +41,21 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
     }
   };
 
-  const handleInitiateCall = async (isVideo: boolean) => {
+  const handleCallClick = (isVideo: boolean) => {
+    setPendingCallType(isVideo ? 'video' : 'voice');
+  };
+
+  const handleConfirmCall = async () => {
+    if (!pendingCallType) return;
+    const isVideo = pendingCallType === 'video';
     const callType = isVideo ? 'VIDEO' : 'VOICE';
+    
     console.log(`[VOICE CALL] Initializing ${callType} call. Target Chat ID: ${chatID}, Initiator ID: ${myID}`);
     
+    setCallStatus('dialing');
     setIsCallActive(true);
+    setPendingCallType(null);
+
     try {
       await startCall(isVideo);
       console.log(`[VOICE CALL] Local media stream successfully captured for ${callType} call.`);
@@ -299,6 +309,9 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
           localStream={localStream} 
           remoteStream={remoteStream} 
           onHangUp={handleHangUp} 
+          username={activeChat.username || activeChat.name || "User"}
+          avatarUrl={activeChat.avatar_url || activeChat.avatar}
+          status={callStatus}
         />
       )}
 
@@ -333,58 +346,70 @@ export default function Chat({ activeChat, myID, onOpenProfile }: ChatProps) {
           <div className="user-details">
             <div className="name-row">
               <h3>{isChannel ? activeChat.name : (activeChat.username || "Unknown")}</h3>
-              {!isChannel && isPartnerOnline && <span className="online-label">online</span>}
             </div>
             <div className="status-container">
-              <ShieldCheck 
-                size={14} 
-                className={(isPartnerOnline || isChannel) ? "text-green" : "text-blue"} 
-              />
-              <span className="status-text">
-                {isChannel ? 'Public Channel' : isPartnerOnline ? 'Secure Active Session' : 'Encrypted Chat'}
+              <span className={`status-text ${isPartnerOnline && !isChannel ? 'online' : 'offline'}`}>
+                {isChannel ? 'channel' : isPartnerOnline ? 'online' : 'offline'}
               </span>
             </div>
           </div>
         </div>
 
         <div className="header-actions" ref={menuRef}>
-          {!isChannel && (
-            <>
-              <button className="action-btn" title="Voice Call" onClick={() => handleInitiateCall(false)}>
-                <Phone size={20} />
-              </button>
-              <button className="action-btn" title="Video Call" onClick={() => handleInitiateCall(true)}>
-                <Video size={20} />
-              </button>
-              <div className="divider-v"></div>
-            </>
-          )}
-          <button 
-            className={`action-btn ${isMenuOpen ? 'active' : ''}`} 
-            title="More" 
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-          >
-            <MoreVertical size={20} />
-          </button>
+  {!isChannel && (
+    <>
+      <button className="action-btn" title="Voice Call" onClick={() => handleCallClick(false)}>
+        <Phone size={20} />
+      </button>
+      <button className="action-btn" title="Video Call" onClick={() => handleCallClick(true)}>
+        <Video size={20} />
+      </button>
+      <div className="divider-v"></div>
+    </>
+  )}
+  <button 
+    className={`action-btn ${isMenuOpen ? 'active' : ''}`} 
+    title="More" 
+    onClick={() => setIsMenuOpen(!isMenuOpen)}
+  >
+    <MoreVertical size={20} />
+  </button>
 
-          {isMenuOpen && (
-            <div className="dropdown-menu telegram-style animate-scale-up">
-              <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); handleHeaderClick(); }}>
-                <User size={16} />
-                <span>View Info</span>
-              </button>
-              <button className="dropdown-item">
-                <VolumeX size={16} />
-                <span>Mute Notifications</span>
-              </button>
-              <div className="dropdown-divider"></div>
-              <button className="dropdown-item delete">
-                <Trash2 size={16} />
-                <span>Delete Chat</span>
-              </button>
-            </div>
-          )}
-        </div>
+  {pendingCallType && (
+    <div className="call-confirm-dropdown animate-scale-up">
+      <p>
+        Start the {pendingCallType === 'video' ? 'video call' : 'voice call'} with{' '}
+        <strong>{activeChat.username || "Unknown"}</strong>?
+      </p>
+      <div className="confirm-actions">
+        <button className="confirm-btn cancel" onClick={() => setPendingCallType(null)}>
+          Cancel
+        </button>
+        <button className="confirm-btn success" onClick={handleConfirmCall}>
+          Call
+        </button>
+      </div>
+    </div>
+  )}
+
+  {isMenuOpen && (
+    <div className="dropdown-menu telegram-style animate-scale-up">
+      <button className="dropdown-item" onClick={() => { setIsMenuOpen(false); handleHeaderClick(); }}>
+        <User size={16} />
+        <span>View Info</span>
+      </button>
+      <button className="dropdown-item">
+        <VolumeX size={16} />
+        <span>Mute Notifications</span>
+      </button>
+      <div className="dropdown-divider"></div>
+      <button className="dropdown-item delete">
+        <Trash2 size={16} />
+        <span>Delete Chat</span>
+      </button>
+    </div>
+  )}
+</div>
       </header>
 
       <div className="messages-scroll-area">

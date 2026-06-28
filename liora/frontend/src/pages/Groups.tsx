@@ -7,6 +7,8 @@ import {
 import { SendGroupMessage, GetGroupMessages } from '../../wailsjs/go/main/App';
 import MessageList from '../components/chat/GroupMessageList';
 import ChatInput from '../components/chat/ChatInput';
+import GroupCallOverlay from '../components/chat/GroupCallOverlay';
+import { useGroupWebRTC } from '../hooks/useGroupWebRTC';
 import "../styles/Groups.scss";
 
 interface GroupData {
@@ -49,7 +51,11 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack,
     const [descriptionInput, setDescriptionInput] = useState(currentGroup.description || '');
     const [isEditingSettings, setIsEditingSettings] = useState(false);
 
+    const [callStatus, setCallStatus] = useState<'dialing' | 'connected' | 'disconnected'>('disconnected');
+    const { startGroupCall, endGroupCall, localStream, speakingUsers, remoteParticipants } = useGroupWebRTC(currentGroup.id.toString(), myID);
+    const [myAvatarUrl, setMyAvatarUrl] = useState<string | undefined>(undefined);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    
     const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
         messagesEndRef.current?.scrollIntoView({ behavior });
     };
@@ -61,6 +67,38 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack,
             setDescriptionInput(initialGroup.description || '');
         }
     }, [initialGroup]);
+
+    useEffect(() => {
+        const fetchMyAvatar = async () => {
+            if (!myID) return;
+
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!uuidRegex.test(myID)) {
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('avatar_url')
+                    .eq('id', myID)
+                    .maybeSingle();
+
+                if (error) {
+                    console.warn("Supabase profiles fetch warning:", error.message);
+                    return;
+                }
+
+                if (data?.avatar_url) {
+                    setMyAvatarUrl(data.avatar_url);
+                }
+            } catch (err) {
+                console.error("Error fetching current user avatar:", err);
+            }
+        };
+
+        fetchMyAvatar();
+    }, [myID]);
 
     const loadMessages = async () => {
         try {
@@ -218,6 +256,17 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack,
         }
     };
 
+    const handleStartCall = async (video: boolean) => {
+        setCallStatus('dialing');
+        await startGroupCall(video);
+        setCallStatus('connected');
+    };
+
+    const handleHangUp = () => {
+        endGroupCall();
+        setCallStatus('disconnected');
+    };
+
     return (
         <div className="channel-container">
             <div className="channel-view animate-fade">
@@ -252,8 +301,12 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack,
                     </div>
 
                     <div className="header-actions">
-                        <button className="action-btn"><Phone size={20} /></button>
-                        <button className="action-btn"><Video size={20} /></button>
+                        <button className="action-btn" onClick={() => handleStartCall(false)}>
+                            <Phone size={20} />
+                        </button>
+                        <button className="action-btn" onClick={() => handleStartCall(true)}>
+                            <Video size={20} />
+                        </button>
                         <div className="divider-v"></div>
                         <button 
                             className={`action-btn ${showInfoModal ? 'active' : ''}`} 
@@ -280,6 +333,19 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack,
                     isChannel={false} 
                 />
             </div>
+
+            {callStatus !== 'disconnected' && (
+                <GroupCallOverlay
+                    localStream={localStream}
+                    localUserAvatar={myAvatarUrl} 
+                    groupAvatar={currentGroup.avatar_url}
+                    remoteParticipants={remoteParticipants}   
+                    speakingUsers={speakingUsers}
+                    onHangUp={handleHangUp}
+                    groupName={currentGroup.name}
+                    status={callStatus}
+                />
+            )}
 
             {showInfoModal && (
                 <div className="channel-modal-overlay animate-fade" onClick={() => setShowInfoModal(false)}>
@@ -386,13 +452,13 @@ export const Group: React.FC<GroupProps> = ({ group: initialGroup, myID, onBack,
                                 )}
 
                                 <div className="meta-item-box clickable-row" onClick={() => copyToClipboard(currentGroup.id.toString(), 'id')}>
-                                    <div className="meta-row-content">
-                                        <label>Group Unique ID</label>
-                                        <code className="secure-code-text">{currentGroup.id}</code>
-                                    </div>
-                                    <button className="copy-field-btn">
-                                        {copiedField === 'id' ? <Check size={16} className="green-icon" /> : <Copy size={16} />}
-                                    </button>
+                                        <div className="meta-row-content">
+                                            <label>Group Unique ID</label>
+                                            <code className="secure-code-text">{currentGroup.id}</code>
+                                        </div>
+                                        <button className="copy-field-btn">
+                                            {copiedField === 'id' ? <Check size={16} className="green-icon" /> : <Copy size={16} />}
+                                        </button>
                                 </div>
 
                                 <div className="meta-item-box">

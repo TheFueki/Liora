@@ -10,5 +10,12 @@
   "author": {
     "name": "Ventie",
     "email": "VentieRavelle@gmail.com"
+  },
+  "info": {
+    "companyName": "Fueki",
+    "productName": "Liora",
+    "productVersion": "0.1.4",
+    "copyright": "Copyright © 2026",
+    "comments": "Privacy-focused communication suite."
   }
 }

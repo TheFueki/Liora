@@ -226,7 +226,11 @@ export const Channel: React.FC<ChannelProps> = ({ channel: initialChannel, myID,
                 </header>
 
                 <div className="messages-scroll-area">
-                    <MessageList messages={messages} myID={myID} />
+                    <MessageList 
+  messages={messages} 
+  myID={myID} 
+  onDeleteMessage={() => {}} 
+/>
                     <div ref={messagesEndRef} />
                 </div>
 

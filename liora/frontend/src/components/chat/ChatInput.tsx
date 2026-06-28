@@ -111,7 +111,7 @@ export default function ChatInput({ onSend, recipientPubKey, isChannel }: ChatIn
                 ? "Encryption key missing..." 
                 : isChannel 
                   ? "Broadcast to channel..." 
-                  : "Write an encrypted message..."
+                  : "Write a message..."
             }
             disabled={isProcessing || (hasKeyError && !isChannel)}
           />
